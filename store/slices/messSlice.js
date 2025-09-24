@@ -57,12 +57,12 @@ const messSlice = createSlice({
     },
     
     // Update mess in list
-    updateMess: (state, action) => {
-      const index = state.messList.findIndex(mess => mess.id === action.payload.id);
-      if (index !== -1) {
-        state.messList[index] = action.payload;
-      }
-    },
+    // updateMess: (state, action) => {
+    //   const index = state.messList.findIndex(mess => mess.id === action.payload.id);
+    //   if (index !== -1) {
+    //     state.messList[index] = action.payload;
+    //   }
+    // },
     
     // Remove mess from list
     removeMess: (state, action) => {
@@ -119,7 +119,7 @@ export const {
   clearError,
   setMessList,
   addMess,
-  updateMess,
+  // updateMess,
   removeMess,
   setCurrentMess,
   clearCurrentMess,

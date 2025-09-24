@@ -1,9 +1,10 @@
 // src/screens/superadmin/SuperAdminDashboard.js
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +28,8 @@ export default function SuperAdminDashboard({ navigation }) {
   const { user } = useSelector((state) => state.auth);
   const { messList, isLoading, pagination } = useSelector((state) => state.mess);
   const insets = useSafeAreaInsets();
+  const [usersModalVisible, setUsersModalVisible] = useState(false);
+  const [usersSearch, setUsersSearch] = useState('');
 
   // Load mess data on component mount
   useEffect(() => {
@@ -37,11 +40,11 @@ export default function SuperAdminDashboard({ navigation }) {
     try {
       dispatch(setLoading(true));
       console.log('Loading mess data...');
-      
+
       const response = await messService.getAllMessList(0, 10, 'createdAt,desc');
-      
+
       if (response.type === 'success') {
-        console.log('Mess data loaded successfully:', response.data);
+        // console.log('Mess data loaded successfully:', response.data);
         dispatch(setMessList(response.data));
       } else {
         console.error('Failed to load mess data:', response.message);
@@ -52,6 +55,29 @@ export default function SuperAdminDashboard({ navigation }) {
       dispatch(setError('Failed to load mess data'));
     }
   };
+
+  // Derive a simple users list from messes (treat mess owners/admins as users)
+  const derivedUsers = useMemo(() => {
+    const list = Array.isArray(messList) ? messList : [];
+    return list.map((m) => ({
+      id: m.id,
+      name: m.ownerName || m.messName || 'Unknown',
+      email: m.emailAddress || m.email || '—',
+      phone: m.phoneNumber || '—',
+      mess: m.messName || m.name || '—',
+      status: m.status ? 'Active' : 'Inactive',
+    }));
+  }, [messList]);
+
+  const filteredUsers = useMemo(() => {
+    const q = usersSearch.trim().toLowerCase();
+    if (!q) return derivedUsers;
+    return derivedUsers.filter((u) =>
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.mess || '').toLowerCase().includes(q)
+    );
+  }, [derivedUsers, usersSearch]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -74,7 +100,7 @@ export default function SuperAdminDashboard({ navigation }) {
     const routeMap = {
       SuperAdminDashboard: 'Dashboard',
       MessManagement: 'Messes',
-      UserManagement: 'Customers',
+      UserManagement: 'Users',
       FinancialControl: 'Dashboard',
       Reports: 'Dashboard',
       SystemOperations: 'Activity',
@@ -173,76 +199,76 @@ export default function SuperAdminDashboard({ navigation }) {
       logoIconColor="#8B5CF6"
       showNotifications={false}
       notificationCount={0}
-      onNotificationsPress={() => {}}
+      onNotificationsPress={() => { }}
       showProfile={false}
       onProfilePress={handleLogout}
     >
       {/* Sidebar */}
       {sidebarOpen && (
         <>
-        <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={() => setSidebarOpen(false)} />
-        <View style={[styles.sidebar, { paddingTop: insets.top }]}> 
-          <View style={styles.sidebarHeader}>
-            <Text style={styles.sidebarTitle}>Super Admin Panel</Text>
-            <Text style={styles.sidebarSubtitle}>{user?.email || 'superadmin@system.com'}</Text>
+          <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={() => setSidebarOpen(false)} />
+          <View style={[styles.sidebar, { paddingTop: insets.top }]}>
+            <View style={styles.sidebarHeader}>
+              <Text style={styles.sidebarTitle}>Super Admin Panel</Text>
+              <Text style={styles.sidebarSubtitle}>{user?.email || 'superadmin@system.com'}</Text>
+            </View>
+
+            <View style={styles.sidebarMenu}>
+              <TouchableOpacity
+                style={[styles.sidebarItem, { backgroundColor: '#F3F4F6' }]}
+                onPress={() => navigateToScreen('SuperAdminDashboard')}
+              >
+                <Ionicons name="home" size={20} color="#8B5CF6" />
+                <Text style={[styles.sidebarText, { color: '#8B5CF6' }]}>Dashboard</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sidebarItem}
+                onPress={() => navigateToScreen('MessManagement')}
+              >
+                <Ionicons name="business" size={20} color="#718096" />
+                <Text style={styles.sidebarText}>Mess Management</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sidebarItem}
+                onPress={() => navigateToScreen('UserManagement')}
+              >
+                <Ionicons name="people" size={20} color="#718096" />
+                <Text style={styles.sidebarText}>User Management</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sidebarItem}
+                onPress={() => navigateToScreen('FinancialControl')}
+              >
+                <Ionicons name="trending-up" size={20} color="#718096" />
+                <Text style={styles.sidebarText}>Financial Control</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sidebarItem}
+                onPress={() => navigateToScreen('SystemOperations')}
+              >
+                <Ionicons name="settings" size={20} color="#718096" />
+                <Text style={styles.sidebarText}>System Operations</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sidebarItem}
+                onPress={() => navigateToScreen('Reports')}
+              >
+                <Ionicons name="bar-chart" size={20} color="#718096" />
+                <Text style={styles.sidebarText}>Reports</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          
-          <View style={styles.sidebarMenu}>
-            <TouchableOpacity 
-              style={[styles.sidebarItem, { backgroundColor: '#F3F4F6' }]}
-              onPress={() => navigateToScreen('SuperAdminDashboard')}
-            >
-              <Ionicons name="home" size={20} color="#8B5CF6" />
-              <Text style={[styles.sidebarText, { color: '#8B5CF6' }]}>Dashboard</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sidebarItem}
-              onPress={() => navigateToScreen('MessManagement')}
-            >
-              <Ionicons name="business" size={20} color="#718096" />
-              <Text style={styles.sidebarText}>Mess Management</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sidebarItem}
-              onPress={() => navigateToScreen('UserManagement')}
-            >
-              <Ionicons name="people" size={20} color="#718096" />
-              <Text style={styles.sidebarText}>User Management</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sidebarItem}
-              onPress={() => navigateToScreen('FinancialControl')}
-            >
-              <Ionicons name="trending-up" size={20} color="#718096" />
-              <Text style={styles.sidebarText}>Financial Control</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sidebarItem}
-              onPress={() => navigateToScreen('SystemOperations')}
-            >
-              <Ionicons name="settings" size={20} color="#718096" />
-              <Text style={styles.sidebarText}>System Operations</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sidebarItem}
-              onPress={() => navigateToScreen('Reports')}
-            >
-              <Ionicons name="bar-chart" size={20} color="#718096" />
-              <Text style={styles.sidebarText}>Reports</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
         </>
       )}
 
       {/* Main Content */}
-      <ScrollView 
-        style={styles.mainContent} 
+      <ScrollView
+        style={styles.mainContent}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -250,11 +276,11 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeText}>Welcome back,</Text>
           <Text style={styles.adminName}>{user?.email?.split('@')[0] || 'Super Admin'}</Text>
-          <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+          <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
           })}</Text>
         </View>
 
@@ -284,40 +310,40 @@ export default function SuperAdminDashboard({ navigation }) {
               <Ionicons name={isLoading ? "refresh" : "chevron-forward"} size={16} color="#8B5CF6" />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.statsGrid}>
-            <StatCard 
-              title="Total Messes" 
-              value={pagination.totalElements?.toString() || "0"} 
+            <StatCard
+              title="Total Messes"
+              value={pagination.totalElements?.toString() || "0"}
               subtitle="Active messes"
-              icon="business" 
+              icon="business"
               color="#8B5CF6"
               trend="+3 this month"
               onPress={() => navigateToScreen('MessManagement')}
             />
-            <StatCard 
-              title="Total Users" 
-              value="1,247" 
+            <StatCard
+              title="Total Users"
+              value={(derivedUsers.length || 0).toString()}
               subtitle="Across all messes"
-              icon="people" 
+              icon="people"
               color="#4299E1"
-              trend="+89 this week"
+              trend={undefined}
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <StatCard 
-              title="Total Revenue" 
-              value="₹12.4L" 
+            <StatCard
+              title="Total Revenue"
+              value="₹12.4L"
               subtitle="This month"
-              icon="trending-up" 
+              icon="trending-up"
               color="#48BB78"
               trend="+15% vs last month"
               onPress={() => navigateToScreen('FinancialControl')}
             />
-            <StatCard 
-              title="Pending Approvals" 
-              value="7" 
+            <StatCard
+              title="Pending Approvals"
+              value="7"
               subtitle="New mess requests"
-              icon="time" 
+              icon="time"
               color="#F56565"
               onPress={() => navigateToScreen('MessManagement')}
             />
@@ -328,32 +354,32 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.quickActionsSection}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsList}>
-            <QuickActionButton 
-              title="Approve New Mess" 
+            <QuickActionButton
+              title="Approve New Mess"
               description="Review and approve pending mess applications"
-              icon="checkmark-circle" 
+              icon="checkmark-circle"
               color="#48BB78"
               onPress={() => navigateToScreen('MessManagement')}
             />
-            <QuickActionButton 
-              title="Create Admin Account" 
+            <QuickActionButton
+              title="Create Admin Account"
               description="Set up new mess admin credentials"
-              icon="person-add" 
+              icon="person-add"
               color="#4299E1"
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <QuickActionButton 
-              title="Broadcast Message" 
+            <QuickActionButton
+              title="Broadcast Message"
               description="Send notice to all messes and users"
-              icon="megaphone" 
+              icon="megaphone"
               color="#F56565"
               onPress={() => navigateToScreen('SystemOperations')}
             />
-            <QuickActionButton 
-              title="Generate Report" 
+            <QuickActionButton
+              title="Generate Report"
               color="#9F7AEA"
               description="Export system-wide analytics and data"
-              icon="document-text" 
+              icon="document-text"
               onPress={() => navigateToScreen('Reports')}
             />
           </View>
@@ -363,32 +389,32 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.featuresSection}>
           <Text style={styles.sectionTitle}>Mess & Admin Management</Text>
           <View style={styles.featuresGrid}>
-            <FeatureCard 
+            <FeatureCard
               title="Admin Onboarding"
               description="Approve/reject mess owners before they go live"
-              icon="person-check" 
+              icon="person-check"
               color="#48BB78"
               onPress={() => navigateToScreen('MessManagement')}
               badge="7"
             />
-            <FeatureCard 
+            <FeatureCard
               title="Admin Credentials"
               description="Create login IDs and assign roles (owner, manager, staff)"
-              icon="key" 
+              icon="key"
               color="#4299E1"
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Mess Performance"
               description="Track total customers enrolled by each mess"
-              icon="analytics" 
+              icon="analytics"
               color="#9F7AEA"
               onPress={() => navigateToScreen('Reports')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Quality Monitoring"
               description="Track feedback/complaints and auto-flag poor service"
-              icon="star" 
+              icon="star"
               color="#ED8936"
               onPress={() => navigateToScreen('Reports')}
               badge="3"
@@ -400,24 +426,24 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.featuresSection}>
           <Text style={styles.sectionTitle}>Customer & User Oversight</Text>
           <View style={styles.featuresGrid}>
-            <FeatureCard 
+            <FeatureCard
               title="Global User Directory"
               description="See all registered users across all messes"
-              icon="people-circle" 
+              icon="people-circle"
               color="#4299E1"
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Subscription History"
               description="Track user subscription patterns and history"
-              icon="calendar" 
+              icon="calendar"
               color="#48BB78"
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Expiry Alerts"
               description="Notify admins about platform subscription expiry"
-              icon="warning" 
+              icon="warning"
               color="#F56565"
               onPress={() => navigateToScreen('SystemOperations')}
               badge="5"
@@ -429,24 +455,24 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.featuresSection}>
           <Text style={styles.sectionTitle}>Financial Control</Text>
           <View style={styles.featuresGrid}>
-            <FeatureCard 
+            <FeatureCard
               title="Revenue Dashboard"
               description="Total revenue and breakdown per mess"
-              icon="trending-up" 
+              icon="trending-up"
               color="#48BB78"
               onPress={() => navigateToScreen('FinancialControl')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Payment Tracking"
               description="Monitor all transactions across the platform"
-              icon="card" 
+              icon="card"
               color="#4299E1"
               onPress={() => navigateToScreen('FinancialControl')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Tax Reports"
               description="Generate financial reports for tax filing"
-              icon="document-text" 
+              icon="document-text"
               color="#9F7AEA"
               onPress={() => navigateToScreen('Reports')}
             />
@@ -457,46 +483,46 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.featuresSection}>
           <Text style={styles.sectionTitle}>System Operations</Text>
           <View style={styles.featuresGrid}>
-            <FeatureCard 
-              title="Subscription Templates"
-              description="Create global subscription models for all messes"
-              icon="layers" 
+            <FeatureCard
+              title="Add Subscriptions"
+              description="Add new customer subscriptions across all messes"
+              icon="person-add"
               color="#8B5CF6"
               onPress={() => navigateToScreen('SystemOperations')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Content Management"
               description="Broadcast messages across all messes"
-              icon="megaphone" 
+              icon="megaphone"
               color="#F56565"
               onPress={() => navigateToScreen('SystemOperations')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Support Tickets"
               description="Manage and resolve user/admin issues"
-              icon="help-circle" 
+              icon="help-circle"
               color="#ED8936"
               onPress={() => navigateToScreen('SystemOperations')}
               badge="12"
             />
-            <FeatureCard 
+            <FeatureCard
               title="Team Management"
               description="Add sub-superadmins and moderators"
-              icon="people" 
+              icon="people"
               color="#4299E1"
               onPress={() => navigateToScreen('UserManagement')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Notification Control"
               description="Manage push notifications and SMS templates"
-              icon="notifications" 
+              icon="notifications"
               color="#9F7AEA"
               onPress={() => navigateToScreen('SystemOperations')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="Custom Branding"
               description="Change app logo, theme colors, slogans"
-              icon="color-palette" 
+              icon="color-palette"
               color="#38B2AC"
               onPress={() => navigateToScreen('SystemOperations')}
             />
@@ -507,17 +533,17 @@ export default function SuperAdminDashboard({ navigation }) {
         <View style={styles.featuresSection}>
           <Text style={styles.sectionTitle}>Data & Backup</Text>
           <View style={styles.featuresGrid}>
-            <FeatureCard 
+            <FeatureCard
               title="Data Export"
               description="Export all data to Excel/CSV for audits"
-              icon="download" 
+              icon="download"
               color="#48BB78"
               onPress={() => navigateToScreen('Reports')}
             />
-            <FeatureCard 
+            <FeatureCard
               title="System Backup"
               description="Automated backup and restore functionality"
-              icon="cloud-upload" 
+              icon="cloud-upload"
               color="#4299E1"
               onPress={() => navigateToScreen('SystemOperations')}
             />
@@ -533,7 +559,7 @@ export default function SuperAdminDashboard({ navigation }) {
               <Ionicons name="chevron-forward" size={16} color="#8B5CF6" />
             </TouchableOpacity>
           </View>
-          
+
           {/* Recent Mess Approvals */}
           <View style={styles.tableContainer}>
             <View style={styles.tableHeader}>
@@ -542,13 +568,13 @@ export default function SuperAdminDashboard({ navigation }) {
             </View>
             {messList && messList.length > 0 ? (
               messList.slice(0, 3).map((mess, index) => (
-                <TableRow 
+                <TableRow
                   key={mess.id || index}
-                  label={mess.name || mess.messName || 'Unknown Mess'} 
-                  value={mess.status || 'Active'} 
-                  status={mess.status || 'Active'} 
-                  time={mess.createdAt ? new Date(mess.createdAt).toLocaleDateString() : 'Recently'} 
-                  mess={mess.address || mess.location || 'Unknown Location'} 
+                  label={mess.name || mess.messName || 'Unknown Mess'}
+                  value={mess.status || 'Active'}
+                  status={mess.status || 'Active'}
+                  time={mess.createdAt ? new Date(mess.createdAt).toLocaleDateString() : 'Recently'}
+                  mess={mess.address || mess.location || 'Unknown Location'}
                 />
               ))
             ) : (
@@ -583,6 +609,57 @@ export default function SuperAdminDashboard({ navigation }) {
             </View>
           </View>
         </View>
+
+        {/* Users Modal */}
+        <Modal
+          visible={usersModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setUsersModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.usersModalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Users</Text>
+                <TouchableOpacity onPress={() => setUsersModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#718096" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color="#718096" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search users by name, email or mess"
+                  value={usersSearch}
+                  onChangeText={setUsersSearch}
+                />
+              </View>
+
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {filteredUsers.length === 0 ? (
+                  <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                    <Ionicons name="people-outline" size={48} color="#CBD5E0" />
+                    <Text style={{ color: '#A0AEC0', marginTop: 8 }}>No users found</Text>
+                  </View>
+                ) : (
+                  filteredUsers.map((u) => (
+                    <View key={u.id} style={styles.userRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.userName}>{u.name}</Text>
+                        <Text style={styles.userEmail}>{u.email}</Text>
+                        <Text style={styles.userMess}>Mess: {u.mess}</Text>
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: u.status === 'Active' ? '#48BB78' : '#F56565' }]}>
+                        <Text style={styles.statusText}>{u.status}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SuperAdminLayout>
   );
@@ -880,6 +957,27 @@ const styles = StyleSheet.create({
   quickActionsSection: {
     marginBottom: 32,
   },
+  usersModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '95%',
+    maxHeight: '90%',
+    padding: 20,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  userName: { fontSize: 16, fontWeight: '600', color: '#2D3748' },
+  userEmail: { fontSize: 12, color: '#718096', marginTop: 2 },
+  userMess: { fontSize: 12, color: '#4299E1', marginTop: 2, fontWeight: '600' },
   quickActionsList: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

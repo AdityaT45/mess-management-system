@@ -21,7 +21,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import messService from '../../api/messService';
 import SuperAdminLayout from '../../components/superadmin/SuperAdminLayout';
 import { addMess, setError, setLoading, setMessList } from '../../store/slices/messSlice';
+import { API_CONFIG } from '../../config/api';
+import apiClient from '../../api/apiClient';
 
+// import { API_CONFIG} from '../../config/api';
 const { width } = Dimensions.get('window');
 
 export default function MessManagement({ navigation }) {
@@ -31,12 +34,16 @@ export default function MessManagement({ navigation }) {
   const [addMessModalVisible, setAddMessModalVisible] = useState(false);
   const [editMessModalVisible, setEditMessModalVisible] = useState(false);
   const [viewMessModalVisible, setViewMessModalVisible] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
   const [selectedMess, setSelectedMess] = useState(null);
   const [selectedFilters, setSelectedFilters] = useState({
     city: '',
     status: '',
     messType: ''
   });
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMoreData, setHasMoreData] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,12 +98,12 @@ export default function MessManagement({ navigation }) {
       }
 
       console.log('Loading mess data - Page:', page);
-      
-      const response = await messService.getAllMessList(page, 10, 'createdAt,desc');
-      
+
+      const response = await messService.getAllMessList(page, 3, 'createdAt,desc');
+
       if (response.type === 'success') {
-        console.log('Mess data loaded successfully:', response.data);
-        
+        // console.log('Mess data loaded successfully:', response.data);
+
         if (isRefresh || page === 0) {
           dispatch(setMessList(response.data));
         } else {
@@ -104,7 +111,7 @@ export default function MessManagement({ navigation }) {
           const newMessList = [...messList, ...response.data.content];
           dispatch(setMessList({ ...response.data, content: newMessList }));
         }
-        
+
         // Check if there's more data
         setHasMoreData(page < response.data.totalPages - 1);
         setCurrentPage(page);
@@ -125,6 +132,51 @@ export default function MessManagement({ navigation }) {
       loadMessData(nextPage, false);
     }
   }, [isLoading, hasMoreData, currentPage, messList]);
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
+
+  const enterMultiSelect = useCallback((id) => {
+    setMultiSelect(true);
+    setSelectedIds([id]);
+  }, []);
+
+  const exitMultiSelect = useCallback(() => {
+    setMultiSelect(false);
+    setSelectedIds([]);
+  }, []);
+
+  const bulkDelete = useCallback(() => {
+    if (!selectedIds.length) return;
+    Alert.alert('Delete Messes', `Delete ${selectedIds.length} selected ${selectedIds.length === 1 ? 'mess' : 'messes'}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            setIsBulkDeleting(true);
+            // Optimistic update
+            const previous = messList;
+            const filtered = previous.filter(m => !selectedIds.includes(m.id));
+            dispatch(setMessList({ ...pagination, content: filtered, totalElements: (pagination.totalElements || filtered.length) - selectedIds.length }));
+
+            for (const id of selectedIds) {
+              // eslint-disable-next-line no-await-in-loop
+              const resp = await messService.deleteMessSuper(id);
+              if (resp.type !== 'success') throw new Error(resp.message || 'Failed');
+            }
+
+            await loadMessData(0, true);
+            exitMultiSelect();
+          } catch (e) {
+            console.error('Bulk delete failed:', e);
+            Alert.alert('Error', 'Failed to delete selected');
+          } finally {
+            setIsBulkDeleting(false);
+          }
+        }
+      }
+    ]);
+  }, [selectedIds, messList, pagination, dispatch, exitMultiSelect, loadMessData]);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
@@ -139,9 +191,43 @@ export default function MessManagement({ navigation }) {
     setSearchQuery(query);
   }, []);
 
-  const handleViewDetails = useCallback((mess) => {
-    setSelectedMess(mess);
-    setViewMessModalVisible(true);
+  const openViewMess = useCallback(async (id) => {
+    
+    try {
+      setViewLoading(true);
+      setViewMessModalVisible(true);
+      if (id) {
+        let resp = null;
+        
+        
+        
+        try {
+          // Use Super Admin endpoint for fetching detailed mess info
+          
+          resp = await apiClient.get(`${API_CONFIG.ENDPOINTS.MESS.GET_BY_ID}/${id}`);
+          
+          
+          
+        } catch (error) {
+          console.log("error",error);
+          
+          resp = {
+            
+            type: API_RESPONSE_TYPES.ERROR,
+            message: 'Failed to fetch mess details',
+            data: null,
+          };
+        }
+        
+        if (resp?.type === 'success' && resp?.data) {
+          setSelectedMess(resp.data);
+        } else{
+          setSelectedMess(null);
+        }
+      } 
+    } finally {
+      setViewLoading(false);
+    }
   }, []);
 
   const handleEditMess = useCallback((mess) => {
@@ -188,7 +274,7 @@ export default function MessManagement({ navigation }) {
   const [formErrors, setFormErrors] = useState({});
 
   const messTypes = ['Vegetarian', 'Non-Vegetarian', 'Mixed', 'Jain', 'Vegan'];
-  
+
   // Dummy data for Indian address hierarchy
   const indianStates = {
     'Delhi': {
@@ -209,7 +295,7 @@ export default function MessManagement({ navigation }) {
 
   const validateForm = () => {
     const errors = {};
-    
+
     if (!newMess.ownerName.trim()) {
       errors.ownerName = 'Owner name is required';
     }
@@ -265,7 +351,7 @@ export default function MessManagement({ navigation }) {
 
     try {
       dispatch(setLoading(true));
-      
+
       const messData = {
         ownerName: newMess.ownerName,
         phoneNumber: newMess.phoneNumber,
@@ -285,11 +371,11 @@ export default function MessManagement({ navigation }) {
       };
 
       const response = await messService.createMess(messData);
-      
+
       if (response.type === 'success') {
         // Add new mess to the list
         dispatch(addMess(response.data));
-        
+
         // Reset form
         setNewMess({
           ownerName: '',
@@ -335,875 +421,398 @@ export default function MessManagement({ navigation }) {
         logoIconColor="#8B5CF6"
         showNotifications={false}
         notificationCount={0}
-        onNotificationsPress={() => {}}
+        onNotificationsPress={() => { }}
         showProfile={false}
-        onProfilePress={() => {}}
+        onProfilePress={() => { }}
       >
-      {sidebarOpen && (
-        <>
-          <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={() => setSidebarOpen(false)} />
-          <View style={[styles.sidebar, { paddingTop: insets.top }]}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Messes Menu</Text>
-              <Text style={styles.sidebarSubtitle}>Quick actions</Text>
+        {sidebarOpen && (
+          <>
+            <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={() => setSidebarOpen(false)} />
+            <View style={[styles.sidebar, { paddingTop: insets.top }]}>
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>Messes Menu</Text>
+                <Text style={styles.sidebarSubtitle}>Quick actions</Text>
+              </View>
+              <View style={styles.sidebarMenu}>
+                <TouchableOpacity style={[styles.sidebarItem, { backgroundColor: '#F3F4F6' }]} onPress={() => setAddMessModalVisible(true)}>
+                  <Ionicons name="add" size={20} color="#8B5CF6" />
+                  <Text style={[styles.sidebarText, { color: '#8B5CF6' }]}>Add Mess</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidebarItem} onPress={() => handleRefresh()}>
+                  <Ionicons name="refresh" size={20} color="#718096" />
+                  <Text style={styles.sidebarText}>Refresh</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidebarItem} onPress={() => setFilterModalVisible(true)}>
+                  <Ionicons name="options" size={20} color="#718096" />
+                  <Text style={styles.sidebarText}>Filters</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.sidebarMenu}>
-              <TouchableOpacity style={[styles.sidebarItem, { backgroundColor: '#F3F4F6' }]} onPress={() => setAddMessModalVisible(true)}>
-                <Ionicons name="add" size={20} color="#8B5CF6" />
-                <Text style={[styles.sidebarText, { color: '#8B5CF6' }]}>Add Mess</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarItem} onPress={() => handleRefresh()}>
-                <Ionicons name="refresh" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>Refresh</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarItem} onPress={() => setFilterModalVisible(true)}>
-                <Ionicons name="options" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>Filters</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </>
-      )}
+          </>
+        )}
 
-      {/* Main Content */}
-      <View style={styles.mainContent}>
-        {/* Content moved into FlatList header for whole-page scroll */}
+        {/* Main Content */}
+        <View style={styles.mainContent}>
+          {/* Content moved into FlatList header for whole-page scroll */}
 
-        {/* Messes List with Infinite Scroll */}
-        <View style={styles.messesSection}>
-          <FlatList
-            data={filteredMessList}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item: mess }) => (
-              <View style={styles.messCard}>
-                <View style={styles.messCardHeader}>
-                  <View style={{ flex: 1, marginRight: 12 }}>
-                    {renderDietIcons(mess.messType)}
-                    <Text style={styles.messType}>{mess.messType || 'Type'}</Text>
-                    <Text style={styles.messOwnerName}>mess name is here</Text>
+          {/* Messes List with Infinite Scroll */}
+          <View style={styles.messesSection}>
+            <FlatList
+              data={filteredMessList}
+              keyExtractor={(item) => item.id}
+              extraData={{ multiSelect, selectedIds, isBulkDeleting }}
+              renderItem={({ item: mess }) => (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  // onPress={() => { if (multiSelect) toggleSelect(mess.id); else openViewMess(mess); }}
+                  onLongPress={() => enterMultiSelect(mess.id)}
+                  style={[styles.messCard, multiSelect && styles.cardSelectable, mess.status === false && styles.cardInactive]}
+                >
+                  <View style={styles.messCardHeader}>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      {renderDietIcons(mess.messType)}
+                      <Text style={styles.messType}>{mess.messType || 'Type'}</Text>
+                      <Text style={styles.messOwnerName}>{mess.messName}</Text>
+                    </View>
+                    {multiSelect ? (
+                      <View style={[styles.checkbox, selectedIds.includes(mess.id) && styles.checkboxChecked]}>
+                        {selectedIds.includes(mess.id) && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                      </View>
+                    ) : (
+                      <View style={[styles.statusBadge, { backgroundColor: mess.status ? '#48BB78' : '#F56565' }]}>
+                        <Text style={styles.statusText}>{mess.status ? 'Active' : 'Inactive'}</Text>
+                      </View>
+                    )}
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: mess.status ? '#48BB78' : '#F56565' }]}>
-                    <Text style={styles.statusText}>{mess.status ? 'Active' : 'Inactive'}</Text>
+                  <Text style={styles.messLocation}>{mess.city}, {mess.state}</Text>
+                  <Text style={styles.messDescription}>{mess.description || mess.messDescription}</Text>
+                  <View style={styles.messCardFooter}>
+                    <Text style={styles.messDate}>
+                      Created: {mess.createdAt ? new Date(mess.createdAt).toLocaleDateString() : 'N/A'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {!multiSelect && (
+                        <TouchableOpacity style={styles.viewButton} onPress={() => openViewMess(mess.id)}>
+                          <Text style={styles.viewButtonText}>View</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => {
+                          Alert.alert('Delete Mess', 'Are you sure you want to delete this mess?', [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete', style: 'destructive', onPress: async () => {
+                                const resp = await messService.deleteMessSuper(mess.id);
+                                if (resp.type === 'success') {
+                                  Alert.alert('Deleted', resp.message || 'Mess deleted successfully');
+                                  loadMessData(0, true);
+                                } else {
+                                  Alert.alert('Error', resp.message || 'Failed to delete');
+                                }
+                              }
+                            }
+                          ]);
+                        }}
+                      >
+                        <Text style={styles.deleteButtonText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.messLocation}>{mess.city}, {mess.state}</Text>
-                <Text style={styles.messDescription}>{mess.description || mess.messDescription}</Text>
-                <View style={styles.messCardFooter}>
-                  <Text style={styles.messDate}>
-                    Created: {mess.createdAt ? new Date(mess.createdAt).toLocaleDateString() : 'N/A'}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={() => handleEditMess(mess)}>
-                      <Text style={styles.secondaryButtonText}>Edit Mess</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.viewButton} onPress={() => handleViewDetails(mess)}>
-                      <Text style={styles.viewButtonText}>View Details</Text>
+                </TouchableOpacity>
+              )}
+              onEndReached={loadMoreData}
+              onEndReachedThreshold={0.1}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  colors={['#8B5CF6']}
+                  tintColor="#8B5CF6"
+                />
+              }
+              ListHeaderComponent={() => (
+                <View>
+                  {/* Page Header */}
+                  <View style={styles.pageHeader}>
+                    <View style={styles.pageTitleContainer}>
+                      <Text style={styles.pageTitle}>Manage all messes in the system</Text>
+                      <Text style={styles.pageSubtitle}>Search, filter, and manage messes</Text>
+                    </View>
+                  </View>
+
+                  {/* Search with inline Filter trigger */}
+                  <View style={styles.searchFilterBar}>
+                    <View style={styles.searchContainer}>
+                      <Ionicons name="search" size={20} color="#718096" />
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search"
+                        value={searchQuery}
+                        onChangeText={handleSearch}
+                        returnKeyType="search..."
+                      />
+                      <TouchableOpacity onPress={() => setFilterModalVisible(true)}>
+                        <Ionicons name="options" size={20} color="#8B5CF6" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Dashboard before Add New button */}
+                  <View style={[styles.statsSection, { marginTop: 8 }]}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={styles.statCard}
+                      onPress={() => setSelectedFilters({ city: '', status: '', messType: '' })}
+                    >
+                      <Ionicons name="business" size={24} color="#8B5CF6" />
+                      <Text style={styles.statValue}>{pagination.totalElements || 0}</Text>
+                      <Text style={styles.statLabel}>Total Messes</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => {
-                        Alert.alert('Delete Mess', 'Are you sure you want to delete this mess?', [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Delete', style: 'destructive', onPress: async () => {
-                              const resp = await messService.deleteMessSuper(mess.id);
-                              if (resp.type === 'success') {
-                                Alert.alert('Deleted', 'Mess deleted successfully');
-                                loadMessData(0, true);
-                              } else {
-                                Alert.alert('Error', resp.message || 'Failed to delete');
-                              }
-                            } }
-                        ]);
-                      }}
+                      activeOpacity={0.85}
+                      style={styles.statCard}
+                      onPress={() => setSelectedFilters({ ...selectedFilters, status: 'active' })}
                     >
-                      <Text style={styles.deleteButtonText}>Delete</Text>
+                      <Ionicons name="checkmark-circle" size={24} color="#48BB78" />
+                      <Text style={styles.statValue}>{messList.filter(m => m.status).length}</Text>
+                      <Text style={styles.statLabel}>Active</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={styles.statCard}
+                      onPress={() => setSelectedFilters({ ...selectedFilters, status: 'inactive' })}
+                    >
+                      <Ionicons name="pause-circle" size={24} color="#F56565" />
+                      <Text style={styles.statValue}>{messList.filter(m => !m.status).length}</Text>
+                      <Text style={styles.statLabel}>Inactive</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={styles.statCard}
+                      onPress={() => setFilterModalVisible(true)}
+                    >
+                      <Ionicons name="restaurant" size={24} color="#4299E1" />
+                      <Text style={styles.statValue}>{[...new Set(messList.map(m => m.messType))].length}</Text>
+                      <Text style={styles.statLabel}>Types</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-              </View>
-            )}
-            onEndReached={loadMoreData}
-            onEndReachedThreshold={0.1}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                colors={['#8B5CF6']}
-                tintColor="#8B5CF6"
-              />
-            }
-            ListHeaderComponent={() => (
-              <View>
-                {/* Page Header */}
-                <View style={styles.pageHeader}>
-                  <View style={styles.pageTitleContainer}>
-                    <Text style={styles.pageTitle}>Manage all messes in the system</Text>
-                    <Text style={styles.pageSubtitle}>Search, filter, and manage messes</Text>
-                  </View>
-                </View>
 
-                {/* Search with inline Filter trigger */}
-                <View style={styles.searchFilterBar}>
-                  <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={20} color="#718096" />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search"
-                      value={searchQuery}
-                      onChangeText={handleSearch}
-                      returnKeyType="search..."
-                    />
-                    <TouchableOpacity onPress={() => setFilterModalVisible(true)}>
-                      <Ionicons name="options" size={20} color="#8B5CF6" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  {/* Add New Mess */}
+                  <TouchableOpacity
+                    style={[styles.addMessButton, { alignSelf: 'flex-start', marginBottom: 16 }]}
+                    onPress={() => setAddMessModalVisible(true)}
+                  >
+                    <Ionicons name="add" size={20} color="#FFFFFF" />
+                    <Text style={styles.addMessButtonText}>Add New Mess</Text>
+                  </TouchableOpacity>
 
-                {/* Dashboard before Add New button */}
-                <View style={[styles.statsSection, { marginTop: 8 }]}>
-                  <View style={styles.statCard}>
-                    <Ionicons name="business" size={24} color="#8B5CF6" />
-                    <Text style={styles.statValue}>{pagination.totalElements || 0}</Text>
-                    <Text style={styles.statLabel}>Total Messes</Text>
-                  </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="checkmark-circle" size={24} color="#48BB78" />
-                    <Text style={styles.statValue}>{messList.filter(m => m.status).length}</Text>
-                    <Text style={styles.statLabel}>Active</Text>
-                  </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="pause-circle" size={24} color="#F56565" />
-                    <Text style={styles.statValue}>{messList.filter(m => !m.status).length}</Text>
-                    <Text style={styles.statLabel}>Inactive</Text>
-                  </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="restaurant" size={24} color="#4299E1" />
-                    <Text style={styles.statValue}>{[...new Set(messList.map(m => m.messType))].length}</Text>
-                    <Text style={styles.statLabel}>Types</Text>
-                  </View>
+                  {/* Section Title */}
+                  <Text style={styles.sectionTitle}>
+                    Messes ({pagination.totalElements || 0})
+                  </Text>
                 </View>
-
-                {/* Add New Mess */}
-                <TouchableOpacity 
-                  style={[styles.addMessButton, { alignSelf: 'flex-start', marginBottom: 16 }]}
-                  onPress={() => setAddMessModalVisible(true)}
-                >
-                  <Ionicons name="add" size={20} color="#FFFFFF" />
-                  <Text style={styles.addMessButtonText}>Add New Mess</Text>
-                </TouchableOpacity>
-
-                {/* Section Title */}
-                <Text style={styles.sectionTitle}>
-                  Messes ({pagination.totalElements || 0})
-                </Text>
-              </View>
-            )}
-            ListFooterComponent={() => (
-              isLoading && (messList.length > 0) ? (
-                <View style={styles.loadingFooter}>
-                  <Text style={styles.loadingText}>Loading more messes...</Text>
+              )}
+              ListFooterComponent={() => (
+                isLoading && (messList.length > 0) ? (
+                  <View style={styles.loadingFooter}>
+                    <Text style={styles.loadingText}>Loading more messes...</Text>
+                  </View>
+                ) : null
+              )}
+              ListEmptyComponent={() => (
+                <View style={styles.emptyState}>
+                  <Ionicons name="business-outline" size={64} color="#CBD5E0" />
+                  <Text style={styles.emptyStateTitle}>No messes found</Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    {isLoading ? 'Loading messes...' : 'No messes available at the moment'}
+                  </Text>
                 </View>
-              ) : null
-            )}
-            ListEmptyComponent={() => (
-              <View style={styles.emptyState}>
-                <Ionicons name="business-outline" size={64} color="#CBD5E0" />
-                <Text style={styles.emptyStateTitle}>No messes found</Text>
-                <Text style={styles.emptyStateSubtitle}>
-                  {isLoading ? 'Loading messes...' : 'No messes available at the moment'}
-                </Text>
-              </View>
-            )}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.flatListContent}
-          />
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.flatListContent}
+            />
+          </View>
         </View>
-      </View>
 
-      {/* Add Mess Modal */}
-      <Modal
-        visible={addMessModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setAddMessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.addMessModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Mess</Text>
-              <TouchableOpacity onPress={() => setAddMessModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#718096" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-              {/* Owner Information */}
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Owner Information</Text>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Owner Name *</Text>
-                  <TextInput
-                    ref={ownerNameRef}
-                    style={[
-                      styles.input,
-                      formErrors.ownerName && styles.inputError
-                    ]}
-                    placeholder="Enter owner's full name"
-                    value={newMess.ownerName}
-                    onChangeText={(text) => {
-                      setNewMess({...newMess, ownerName: text});
-                      if (formErrors.ownerName) {
-                        setFormErrors({...formErrors, ownerName: ''});
-                      }
-                    }}
-                  />
-                  {formErrors.ownerName && (
-                    <Text style={styles.errorText}>{formErrors.ownerName}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number *</Text>
-                  <TextInput
-                    ref={phoneNumberRef}
-                    style={[
-                      styles.input,
-                      formErrors.phoneNumber && styles.inputError
-                    ]}
-                    placeholder="Enter phone number"
-                    value={newMess.phoneNumber}
-                    onChangeText={(text) => {
-                      setNewMess({...newMess, phoneNumber: text});
-                      if (formErrors.phoneNumber) {
-                        setFormErrors({...formErrors, phoneNumber: ''});
-                      }
-                    }}
-                    keyboardType="phone-pad"
-                  />
-                  {formErrors.phoneNumber && (
-                    <Text style={styles.errorText}>{formErrors.phoneNumber}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Email Address *</Text>
-                  <TextInput
-                    ref={emailAddressRef}
-                    style={[
-                      styles.input,
-                      formErrors.emailAddress && styles.inputError
-                    ]}
-                    placeholder="Enter email address"
-                    value={newMess.emailAddress}
-                    onChangeText={(text) => {
-                      setNewMess({...newMess, emailAddress: text});
-                      if (formErrors.emailAddress) {
-                        setFormErrors({...formErrors, emailAddress: ''});
-                      }
-                    }}
-                    keyboardType="email-address"
-                  />
-                  {formErrors.emailAddress && (
-                    <Text style={styles.errorText}>{formErrors.emailAddress}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Password *</Text>
-                  <TextInput
-                    ref={passwordRef}
-                    style={[
-                      styles.input,
-                      formErrors.password && styles.inputError
-                    ]}
-                    placeholder="Enter password"
-                    value={newMess.password}
-                    onChangeText={(text) => {
-                      setNewMess({...newMess, password: text});
-                      if (formErrors.password) {
-                        setFormErrors({...formErrors, password: ''});
-                      }
-                    }}
-                    secureTextEntry
-                  />
-                  {formErrors.password && (
-                    <Text style={styles.errorText}>{formErrors.password}</Text>
-                  )}
-                </View>
+        {/* Add Mess Modal */}
+        <Modal
+          visible={addMessModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setAddMessModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.addMessModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add New Mess</Text>
+                <TouchableOpacity onPress={() => setAddMessModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#718096" />
+                </TouchableOpacity>
               </View>
 
-              {/* Location Information */}
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Location Information</Text>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Address</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Enter full address"
-                    value={newMess.address}
-                    onChangeText={(text) => setNewMess({...newMess, address: text})}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
+              <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+                {/* Owner Information */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Owner Information</Text>
 
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.inputLabel}>City *</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Owner Name *</Text>
                     <TextInput
-                      ref={cityRef}
+                      ref={ownerNameRef}
                       style={[
                         styles.input,
-                        formErrors.city && styles.inputError
+                        formErrors.ownerName && styles.inputError
                       ]}
-                      placeholder="Enter city"
-                      value={newMess.city}
+                      placeholder="Enter owner's full name"
+                      value={newMess.ownerName}
                       onChangeText={(text) => {
-                        setNewMess({...newMess, city: text});
-                        if (formErrors.city) {
-                          setFormErrors({...formErrors, city: ''});
+                        setNewMess({ ...newMess, ownerName: text });
+                        if (formErrors.ownerName) {
+                          setFormErrors({ ...formErrors, ownerName: '' });
                         }
                       }}
                     />
-                    {formErrors.city && (
-                      <Text style={styles.errorText}>{formErrors.city}</Text>
+                    {formErrors.ownerName && (
+                      <Text style={styles.errorText}>{formErrors.ownerName}</Text>
                     )}
                   </View>
 
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={styles.inputLabel}>ZIP Code</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Phone Number *</Text>
                     <TextInput
-                      style={styles.input}
-                      placeholder="Enter ZIP code"
-                      value={newMess.zip}
-                      onChangeText={(text) => setNewMess({...newMess, zip: text})}
-                      keyboardType="numeric"
+                      ref={phoneNumberRef}
+                      style={[
+                        styles.input,
+                        formErrors.phoneNumber && styles.inputError
+                      ]}
+                      placeholder="Enter phone number"
+                      value={newMess.phoneNumber}
+                      onChangeText={(text) => {
+                        setNewMess({ ...newMess, phoneNumber: text });
+                        if (formErrors.phoneNumber) {
+                          setFormErrors({ ...formErrors, phoneNumber: '' });
+                        }
+                      }}
+                      keyboardType="phone-pad"
+                    />
+                    {formErrors.phoneNumber && (
+                      <Text style={styles.errorText}>{formErrors.phoneNumber}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Email Address *</Text>
+                    <TextInput
+                      ref={emailAddressRef}
+                      style={[
+                        styles.input,
+                        formErrors.emailAddress && styles.inputError
+                      ]}
+                      placeholder="Enter email address"
+                      value={newMess.emailAddress}
+                      onChangeText={(text) => {
+                        setNewMess({ ...newMess, emailAddress: text });
+                        if (formErrors.emailAddress) {
+                          setFormErrors({ ...formErrors, emailAddress: '' });
+                        }
+                      }}
+                      keyboardType="email-address"
+                    />
+                    {formErrors.emailAddress && (
+                      <Text style={styles.errorText}>{formErrors.emailAddress}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Password *</Text>
+                    <TextInput
+                      ref={passwordRef}
+                      style={[
+                        styles.input,
+                        formErrors.password && styles.inputError
+                      ]}
+                      placeholder="Enter password"
+                      value={newMess.password}
+                      onChangeText={(text) => {
+                        setNewMess({ ...newMess, password: text });
+                        if (formErrors.password) {
+                          setFormErrors({ ...formErrors, password: '' });
+                        }
+                      }}
+                      secureTextEntry
+                    />
+                    {formErrors.password && (
+                      <Text style={styles.errorText}>{formErrors.password}</Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Location Information */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Location Information</Text>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Address</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Enter full address"
+                      value={newMess.address}
+                      onChangeText={(text) => setNewMess({ ...newMess, address: text })}
+                      multiline
+                      numberOfLines={3}
                     />
                   </View>
-                </View>
 
-                {/* Country Selection */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Country</Text>
-                  <View style={styles.pickerWrapper}>
-                    <Picker
-                      selectedValue={newMess.country}
-                      onValueChange={(itemValue) => {
-                        setNewMess({
-                          ...newMess,
-                          country: itemValue,
-                          state: '',
-                          district: '',
-                          taluka: ''
-                        });
-                      }}
-                      style={styles.picker}
-                    >
-                      <Picker.Item label="Select Country" value="" />
-                      <Picker.Item label="India" value="India" />
-                    </Picker>
+                  <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>City *</Text>
+                      <TextInput
+                        ref={cityRef}
+                        style={[
+                          styles.input,
+                          formErrors.city && styles.inputError
+                        ]}
+                        placeholder="Enter city"
+                        value={newMess.city}
+                        onChangeText={(text) => {
+                          setNewMess({ ...newMess, city: text });
+                          if (formErrors.city) {
+                            setFormErrors({ ...formErrors, city: '' });
+                          }
+                        }}
+                      />
+                      {formErrors.city && (
+                        <Text style={styles.errorText}>{formErrors.city}</Text>
+                      )}
+                    </View>
+
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                      <Text style={styles.inputLabel}>ZIP Code</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter ZIP code"
+                        value={newMess.zip}
+                        onChangeText={(text) => setNewMess({ ...newMess, zip: text })}
+                        keyboardType="numeric"
+                      />
+                    </View>
                   </View>
-                </View>
 
-                {/* State Selection */}
-                {newMess.country === 'India' && (
+                  {/* Country Selection */}
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>State</Text>
+                    <Text style={styles.inputLabel}>Country</Text>
                     <View style={styles.pickerWrapper}>
                       <Picker
-                        selectedValue={newMess.state}
+                        selectedValue={newMess.country}
                         onValueChange={(itemValue) => {
                           setNewMess({
                             ...newMess,
-                            state: itemValue,
+                            country: itemValue,
+                            state: '',
                             district: '',
                             taluka: ''
                           });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select State" value="" />
-                        {Object.keys(indianStates).map((state) => (
-                          <Picker.Item key={state} label={state} value={state} />
-                        ))}
-                      </Picker>
-                    </View>
-                  </View>
-                )}
-
-                {/* District Selection */}
-                {newMess.state && newMess.country === 'India' && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>District</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={newMess.district}
-                        onValueChange={(itemValue) => {
-                          setNewMess({
-                            ...newMess,
-                            district: itemValue,
-                            taluka: ''
-                          });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select District" value="" />
-                        {newMess.state && indianStates[newMess.state]?.districts && 
-                          Object.keys(indianStates[newMess.state].districts).map((district) => (
-                            <Picker.Item key={district} label={district} value={district} />
-                          ))
-                        }
-                      </Picker>
-                    </View>
-                  </View>
-                )}
-
-                {/* Taluka Selection */}
-                {newMess.district && newMess.country === 'India' && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Taluka</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={newMess.taluka}
-                        onValueChange={(itemValue) => {
-                          setNewMess({
-                            ...newMess,
-                            taluka: itemValue
-                          });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select Taluka" value="" />
-                        {newMess.district && newMess.state && 
-                          indianStates[newMess.state]?.districts?.[newMess.district]?.map((taluka) => (
-                            <Picker.Item key={taluka} label={taluka} value={taluka} />
-                          ))
-                        }
-                      </Picker>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Mess Configuration */}
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Mess Configuration</Text>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Type</Text>
-                  <View style={styles.pickerContainer}>
-                    {messTypes.map((type) => (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.pickerOption,
-                          newMess.messType === type && styles.pickerOptionSelected
-                        ]}
-                        onPress={() => setNewMess({...newMess, messType: type})}
-                      >
-                        <Text style={[
-                          styles.pickerOptionText,
-                          newMess.messType === type && styles.pickerOptionTextSelected
-                        ]}>
-                          {type}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Description</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Describe your mess (cuisine, specialties, etc.)"
-                    value={newMess.messDescription}
-                    onChangeText={(text) => setNewMess({...newMess, messDescription: text})}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Status</Text>
-                  <View style={styles.switchContainer}>
-                    <Text style={styles.switchLabel}>
-                      {newMess.status ? 'Active' : 'Inactive'}
-                    </Text>
-                    <Switch
-                      value={newMess.status}
-                      onValueChange={(value) => setNewMess({...newMess, status: value})}
-                      trackColor={{ false: '#E2E8F0', true: '#8B5CF6' }}
-                      thumbColor={newMess.status ? '#FFFFFF' : '#FFFFFF'}
-                    />
-                  </View>
-                </View>
-              </View>
-
-              {/* Additional Information */}
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Additional Information</Text>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Notes</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Any additional notes or special requirements"
-                    value={newMess.notes}
-                    onChangeText={(text) => setNewMess({...newMess, notes: text})}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setAddMessModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.addMessButton}
-                onPress={handleAddMess}
-              >
-                <Text style={styles.addMessButtonText}>Add Mess</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Filter Modal */}
-      <Modal
-        visible={filterModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.addMessModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Messes</Text>
-              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#718096" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ maxHeight: 400 }}>
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>City</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Filter by city (exact)"
-                  value={selectedFilters.city}
-                  onChangeText={(text) => setSelectedFilters({ ...selectedFilters, city: text })}
-                />
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Status</Text>
-                <View style={styles.pickerWrapper}>
-                  <Picker
-                    selectedValue={selectedFilters.status}
-                    onValueChange={(v) => setSelectedFilters({ ...selectedFilters, status: v })}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Any" value="" />
-                    <Picker.Item label="Active" value="active" />
-                    <Picker.Item label="Inactive" value="inactive" />
-                  </Picker>
-                </View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Mess Type</Text>
-                <View style={styles.pickerWrapper}>
-                  <Picker
-                    selectedValue={selectedFilters.messType}
-                    onValueChange={(v) => setSelectedFilters({ ...selectedFilters, messType: v })}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Any" value="" />
-                    {messTypes.map((t) => (
-                      <Picker.Item key={t} label={t} value={t} />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setSelectedFilters({ city: '', status: '', messType: '' })}
-              >
-                <Text style={styles.cancelButtonText}>Reset</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.addMessButton}
-                onPress={() => setFilterModalVisible(false)}
-              >
-                <Text style={styles.addMessButtonText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* View Details Modal */}
-      <Modal
-        visible={viewMessModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setViewMessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.addMessModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Mess Details</Text>
-              <TouchableOpacity onPress={() => setViewMessModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#718096" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Basic Information</Text>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Mess Name</Text><Text>{selectedMess?.messName || '—'}</Text></View>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Owner Name</Text><Text>{selectedMess?.ownerName || '—'}</Text></View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Type</Text>
-                  <View style={{ marginTop: 6 }}>{renderDietIcons(selectedMess?.messType)}</View>
-                </View>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Status</Text><Text>{selectedMess?.status ? 'Active' : 'Inactive'}</Text></View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Contact</Text>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Phone</Text><Text>{selectedMess?.phoneNumber || '—'}</Text></View>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Email</Text><Text>{selectedMess?.emailAddress || selectedMess?.email || '—'}</Text></View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Location</Text>
-                <View style={styles.inputGroup}><Text style={styles.inputLabel}>Address</Text><Text>{selectedMess?.address || '—'}</Text></View>
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.inputLabel}>City</Text>
-                    <Text>{selectedMess?.city || '—'}</Text>
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={styles.inputLabel}>State</Text>
-                    <Text>{selectedMess?.state || '—'}</Text>
-                  </View>
-                </View>
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.inputLabel}>Country</Text>
-                    <Text>{selectedMess?.country || '—'}</Text>
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={styles.inputLabel}>ZIP</Text>
-                    <Text>{selectedMess?.zip || '—'}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Description</Text>
-                <Text>{selectedMess?.description || selectedMess?.messDescription || '—'}</Text>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setViewMessModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.addMessButton}
-                onPress={() => {
-                  setViewMessModalVisible(false);
-                  setEditMessModalVisible(true);
-                }}
-              >
-                <Text style={styles.addMessButtonText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Mess Modal */}
-      <Modal
-        visible={editMessModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditMessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.addMessModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Mess</Text>
-              <TouchableOpacity onPress={() => setEditMessModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#718096" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Basic Information</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter mess name"
-                    value={selectedMess?.messName || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, messName: text })}
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="00010"
-                    value={selectedMess?.messNumber?.toString?.() || selectedMess?.messNumber || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, messNumber: text })}
-                    keyboardType="number-pad"
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Owner Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter owner name"
-                    value={selectedMess?.ownerName || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, ownerName: text })}
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Mess Type</Text>
-                  <View style={styles.pickerContainer}>
-                    {messTypes.map((type) => (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.pickerOption,
-                          selectedMess?.messType === type && styles.pickerOptionSelected
-                        ]}
-                        onPress={() => setSelectedMess({ ...selectedMess, messType: type })}
-                      >
-                        <Text style={[
-                          styles.pickerOptionText,
-                          selectedMess?.messType === type && styles.pickerOptionTextSelected
-                        ]}>
-                          {type}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-                <View style={[styles.inputGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                  <Text style={styles.inputLabel}>Status</Text>
-                  <Switch
-                    value={!!selectedMess?.status}
-                    onValueChange={(v) => setSelectedMess({ ...selectedMess, status: v })}
-                    trackColor={{ false: '#E2E8F0', true: '#8B5CF6' }}
-                    thumbColor={'#FFFFFF'}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Contact</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter phone"
-                    value={selectedMess?.phoneNumber || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, phoneNumber: text })}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Email</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter email"
-                    value={selectedMess?.emailAddress || selectedMess?.email || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, emailAddress: text })}
-                    keyboardType="email-address"
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Password (optional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter new password"
-                    value={selectedMess?.password || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, password: text })}
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Location</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Address</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Enter address"
-                    value={selectedMess?.address || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, address: text })}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.inputLabel}>City</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="City"
-                      value={selectedMess?.city || ''}
-                      onChangeText={(text) => setSelectedMess({ ...selectedMess, city: text })}
-                    />
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={styles.inputLabel}>State</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={selectedMess?.state || ''}
-                        onValueChange={(itemValue) => {
-                          setSelectedMess({ ...selectedMess, state: itemValue, district: '', taluka: '' });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select State" value="" />
-                        {Object.keys(indianStates).map((state) => (
-                          <Picker.Item key={state} label={state} value={state} />
-                        ))}
-                      </Picker>
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.inputLabel}>Country</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={selectedMess?.country || ''}
-                        onValueChange={(itemValue) => {
-                          setSelectedMess({ ...selectedMess, country: itemValue, state: '', district: '', taluka: '' });
                         }}
                         style={styles.picker}
                       >
@@ -1212,132 +821,658 @@ export default function MessManagement({ navigation }) {
                       </Picker>
                     </View>
                   </View>
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                    <Text style={styles.inputLabel}>ZIP</Text>
+
+                  {/* State Selection */}
+                  {newMess.country === 'India' && (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>State</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={newMess.state}
+                          onValueChange={(itemValue) => {
+                            setNewMess({
+                              ...newMess,
+                              state: itemValue,
+                              district: '',
+                              taluka: ''
+                            });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select State" value="" />
+                          {Object.keys(indianStates).map((state) => (
+                            <Picker.Item key={state} label={state} value={state} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* District Selection */}
+                  {newMess.state && newMess.country === 'India' && (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>District</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={newMess.district}
+                          onValueChange={(itemValue) => {
+                            setNewMess({
+                              ...newMess,
+                              district: itemValue,
+                              taluka: ''
+                            });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select District" value="" />
+                          {newMess.state && indianStates[newMess.state]?.districts &&
+                            Object.keys(indianStates[newMess.state].districts).map((district) => (
+                              <Picker.Item key={district} label={district} value={district} />
+                            ))
+                          }
+                        </Picker>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Taluka Selection */}
+                  {newMess.district && newMess.country === 'India' && (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Taluka</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={newMess.taluka}
+                          onValueChange={(itemValue) => {
+                            setNewMess({
+                              ...newMess,
+                              taluka: itemValue
+                            });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select Taluka" value="" />
+                          {newMess.district && newMess.state &&
+                            indianStates[newMess.state]?.districts?.[newMess.district]?.map((taluka) => (
+                              <Picker.Item key={taluka} label={taluka} value={taluka} />
+                            ))
+                          }
+                        </Picker>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Mess Configuration */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Mess Configuration</Text>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Type</Text>
+                    <View style={styles.pickerContainer}>
+                      {messTypes.map((type) => (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.pickerOption,
+                            newMess.messType === type && styles.pickerOptionSelected
+                          ]}
+                          onPress={() => setNewMess({ ...newMess, messType: type })}
+                        >
+                          <Text style={[
+                            styles.pickerOptionText,
+                            newMess.messType === type && styles.pickerOptionTextSelected
+                          ]}>
+                            {type}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Description</Text>
                     <TextInput
-                      style={styles.input}
-                      placeholder="ZIP"
-                      value={selectedMess?.zip || ''}
-                      onChangeText={(text) => setSelectedMess({ ...selectedMess, zip: text })}
-                      keyboardType="numeric"
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Describe your mess (cuisine, specialties, etc.)"
+                      value={newMess.messDescription}
+                      onChangeText={(text) => setNewMess({ ...newMess, messDescription: text })}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Status</Text>
+                    <View style={styles.switchContainer}>
+                      <Text style={styles.switchLabel}>
+                        {newMess.status ? 'Active' : 'Inactive'}
+                      </Text>
+                      <Switch
+                        value={newMess.status}
+                        onValueChange={(value) => setNewMess({ ...newMess, status: value })}
+                        trackColor={{ false: '#E2E8F0', true: '#8B5CF6' }}
+                        thumbColor={newMess.status ? '#FFFFFF' : '#FFFFFF'}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Additional Information */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Additional Information</Text>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Notes</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Any additional notes or special requirements"
+                      value={newMess.notes}
+                      onChangeText={(text) => setNewMess({ ...newMess, notes: text })}
+                      multiline
+                      numberOfLines={3}
                     />
                   </View>
                 </View>
-                {selectedMess?.state && selectedMess?.country === 'India' ? (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>District</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={selectedMess?.district || ''}
-                        onValueChange={(itemValue) => {
-                          setSelectedMess({ ...selectedMess, district: itemValue, taluka: '' });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select District" value="" />
-                        {selectedMess?.state && indianStates[selectedMess.state]?.districts &&
-                          Object.keys(indianStates[selectedMess.state].districts).map((district) => (
-                            <Picker.Item key={district} label={district} value={district} />
-                          ))
-                        }
-                      </Picker>
-                    </View>
-                  </View>
-                ) : null}
-                {selectedMess?.district && selectedMess?.country === 'India' ? (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Taluka</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Picker
-                        selectedValue={selectedMess?.taluka || ''}
-                        onValueChange={(itemValue) => {
-                          setSelectedMess({ ...selectedMess, taluka: itemValue });
-                        }}
-                        style={styles.picker}
-                      >
-                        <Picker.Item label="Select Taluka" value="" />
-                        {selectedMess?.district && selectedMess?.state &&
-                          indianStates[selectedMess.state]?.districts?.[selectedMess.district]?.map((taluka) => (
-                            <Picker.Item key={taluka} label={taluka} value={taluka} />
-                          ))
-                        }
-                      </Picker>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
+              </ScrollView>
 
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Enter description"
-                  value={selectedMess?.description || selectedMess?.messDescription || ''}
-                  onChangeText={(text) => setSelectedMess({ ...selectedMess, description: text })}
-                  multiline
-                  numberOfLines={3}
-                />
-                <View style={[styles.inputGroup, { marginTop: 12 }]}>
-                  <Text style={styles.inputLabel}>Notes</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Any additional notes"
-                    value={selectedMess?.notes || ''}
-                    onChangeText={(text) => setSelectedMess({ ...selectedMess, notes: text })}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setAddMessModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addMessButton}
+                  onPress={handleAddMess}
+                >
+                  <Text style={styles.addMessButtonText}>Add Mess</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
+          </View>
+        </Modal>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setEditMessModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+        {/* Bottom Selection Toolbar */}
+        {multiSelect && (
+          <View style={styles.bottomSelectionBar}>
+            <Text style={styles.bottomSelectionText}>{selectedIds.length} selected</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={styles.bottomCancelButton} onPress={exitMultiSelect}>
+                <Text style={styles.bottomCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.addMessButton}
-                onPress={async () => {
-                  if (!selectedMess?.id) {
-                    Alert.alert('Error', 'Invalid mess');
-                    return;
-                  }
-                  const payload = {
-                    email: selectedMess.emailAddress || selectedMess.email,
-                    password: selectedMess.password,
-                    messNumber: selectedMess.messNumber,
-                    ownerName: selectedMess.ownerName,
-                    messName: selectedMess.messName,
-                    phoneNumber: selectedMess.phoneNumber,
-                    address: selectedMess.address,
-                    city: selectedMess.city,
-                    state: selectedMess.state,
-                    country: selectedMess.country,
-                    zip: selectedMess.zip,
-                    status: Boolean(selectedMess.status),
-                    messType: selectedMess.messType,
-                    description: selectedMess.description || selectedMess.messDescription,
-                    notes: selectedMess.notes,
-                  };
-                  const resp = await messService.updateMessSuper(selectedMess.id, payload);
-                  if (resp.type === 'success') {
-                    Alert.alert('Success', 'Mess updated');
-                    setEditMessModalVisible(false);
-                    loadMessData(0, true);
-                  } else {
-                    Alert.alert('Error', resp.message || 'Failed to update');
-                  }
-                }}
-              >
-                <Text style={styles.addMessButtonText}>Save</Text>
+              <TouchableOpacity style={[styles.bottomDeleteButton, isBulkDeleting && { opacity: 0.7 }]} disabled={isBulkDeleting} onPress={bulkDelete}>
+                <Text style={styles.bottomDeleteText}>{isBulkDeleting ? 'Deleting…' : 'Delete Selected'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+        )}
+
+        {/* Filter Modal */}
+        <Modal
+          visible={filterModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setFilterModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.addMessModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Filter Messes</Text>
+                <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#718096" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ maxHeight: 400 }}>
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>City</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Filter by city (exact)"
+                    value={selectedFilters.city}
+                    onChangeText={(text) => setSelectedFilters({ ...selectedFilters, city: text })}
+                  />
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Status</Text>
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={selectedFilters.status}
+                      onValueChange={(v) => setSelectedFilters({ ...selectedFilters, status: v })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Any" value="" />
+                      <Picker.Item label="Active" value="active" />
+                      <Picker.Item label="Inactive" value="inactive" />
+                    </Picker>
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Mess Type</Text>
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={selectedFilters.messType}
+                      onValueChange={(v) => setSelectedFilters({ ...selectedFilters, messType: v })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Any" value="" />
+                      {messTypes.map((t) => (
+                        <Picker.Item key={t} label={t} value={t} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setSelectedFilters({ city: '', status: '', messType: '' })}
+                >
+                  <Text style={styles.cancelButtonText}>Reset</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addMessButton}
+                  onPress={() => setFilterModalVisible(false)}
+                >
+                  <Text style={styles.addMessButtonText}>Apply</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* View Details Modal */}
+        <Modal
+          visible={viewMessModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setViewMessModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.addMessModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Mess Details</Text>
+                <TouchableOpacity onPress={() => setViewMessModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#718096" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+                {viewLoading ? (
+                  <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                    <Text style={{ color: '#6B7280' }}>Loading...</Text>
+                  </View>
+                ) : null}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Basic Information</Text>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Mess Name</Text><Text>{selectedMess?.messName || '—'}</Text></View>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Owner Name</Text><Text>{selectedMess?.ownerName || '—'}</Text></View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Type</Text>
+                    <View style={{ marginTop: 6 }}>{renderDietIcons(selectedMess?.messType)}</View>
+                  </View>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Status</Text><Text>{selectedMess?.status ? 'Active' : 'Inactive'}</Text></View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Contact</Text>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Phone</Text><Text>{selectedMess?.phoneNumber || '—'}</Text></View>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Email</Text><Text>{selectedMess?.emailAddress || selectedMess?.email || '—'}</Text></View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Location</Text>
+                  <View style={styles.inputGroup}><Text style={styles.inputLabel}>Address</Text><Text>{selectedMess?.address || '—'}</Text></View>
+                  <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>City</Text>
+                      <Text>{selectedMess?.city || '—'}</Text>
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                      <Text style={styles.inputLabel}>State</Text>
+                      <Text>{selectedMess?.state || '—'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>Country</Text>
+                      <Text>{selectedMess?.country || '—'}</Text>
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                      <Text style={styles.inputLabel}>ZIP</Text>
+                      <Text>{selectedMess?.zip || '—'}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Description</Text>
+                  <Text>{selectedMess?.description || selectedMess?.messDescription || '—'}</Text>
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setViewMessModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Close</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addMessButton}
+                  onPress={() => {
+                    setViewMessModalVisible(false);
+                    setEditMessModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.addMessButtonText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Mess Modal */}
+        <Modal
+          visible={editMessModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setEditMessModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.addMessModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Mess</Text>
+                <TouchableOpacity onPress={() => setEditMessModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#718096" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Basic Information</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter mess name"
+                      value={selectedMess?.messName || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, messName: text })}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Number</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="00010"
+                      value={selectedMess?.messNumber?.toString?.() || selectedMess?.messNumber || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, messNumber: text })}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Owner Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter owner name"
+                      value={selectedMess?.ownerName || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, ownerName: text })}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Mess Type</Text>
+                    <View style={styles.pickerContainer}>
+                      {messTypes.map((type) => (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.pickerOption,
+                            selectedMess?.messType === type && styles.pickerOptionSelected
+                          ]}
+                          onPress={() => setSelectedMess({ ...selectedMess, messType: type })}
+                        >
+                          <Text style={[
+                            styles.pickerOptionText,
+                            selectedMess?.messType === type && styles.pickerOptionTextSelected
+                          ]}>
+                            {type}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={[styles.inputGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                    <Text style={styles.inputLabel}>Status</Text>
+                    <Switch
+                      value={!!selectedMess?.status}
+                      onValueChange={(v) => setSelectedMess({ ...selectedMess, status: v })}
+                      trackColor={{ false: '#E2E8F0', true: '#8B5CF6' }}
+                      thumbColor={'#FFFFFF'}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Contact</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Phone</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter phone"
+                      value={selectedMess?.phoneNumber || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, phoneNumber: text })}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Email</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter email"
+                      value={selectedMess?.emailAddress || selectedMess?.email || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, emailAddress: text })}
+                      keyboardType="email-address"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Password (optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter new password"
+                      value={selectedMess?.password || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, password: text })}
+                      secureTextEntry
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Location</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Address</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Enter address"
+                      value={selectedMess?.address || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, address: text })}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+                  <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>City</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="City"
+                        value={selectedMess?.city || ''}
+                        onChangeText={(text) => setSelectedMess({ ...selectedMess, city: text })}
+                      />
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                      <Text style={styles.inputLabel}>State</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={selectedMess?.state || ''}
+                          onValueChange={(itemValue) => {
+                            setSelectedMess({ ...selectedMess, state: itemValue, district: '', taluka: '' });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select State" value="" />
+                          {Object.keys(indianStates).map((state) => (
+                            <Picker.Item key={state} label={state} value={state} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>Country</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={selectedMess?.country || ''}
+                          onValueChange={(itemValue) => {
+                            setSelectedMess({ ...selectedMess, country: itemValue, state: '', district: '', taluka: '' });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select Country" value="" />
+                          <Picker.Item label="India" value="India" />
+                        </Picker>
+                      </View>
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                      <Text style={styles.inputLabel}>ZIP</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="ZIP"
+                        value={selectedMess?.zip || ''}
+                        onChangeText={(text) => setSelectedMess({ ...selectedMess, zip: text })}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  {selectedMess?.state && selectedMess?.country === 'India' ? (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>District</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={selectedMess?.district || ''}
+                          onValueChange={(itemValue) => {
+                            setSelectedMess({ ...selectedMess, district: itemValue, taluka: '' });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select District" value="" />
+                          {selectedMess?.state && indianStates[selectedMess.state]?.districts &&
+                            Object.keys(indianStates[selectedMess.state].districts).map((district) => (
+                              <Picker.Item key={district} label={district} value={district} />
+                            ))
+                          }
+                        </Picker>
+                      </View>
+                    </View>
+                  ) : null}
+                  {selectedMess?.district && selectedMess?.country === 'India' ? (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Taluka</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={selectedMess?.taluka || ''}
+                          onValueChange={(itemValue) => {
+                            setSelectedMess({ ...selectedMess, taluka: itemValue });
+                          }}
+                          style={styles.picker}
+                        >
+                          <Picker.Item label="Select Taluka" value="" />
+                          {selectedMess?.district && selectedMess?.state &&
+                            indianStates[selectedMess.state]?.districts?.[selectedMess.district]?.map((taluka) => (
+                              <Picker.Item key={taluka} label={taluka} value={taluka} />
+                            ))
+                          }
+                        </Picker>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionTitle}>Description</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Enter description"
+                    value={selectedMess?.description || selectedMess?.messDescription || ''}
+                    onChangeText={(text) => setSelectedMess({ ...selectedMess, description: text })}
+                    multiline
+                    numberOfLines={3}
+                  />
+                  <View style={[styles.inputGroup, { marginTop: 12 }]}>
+                    <Text style={styles.inputLabel}>Notes</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Any additional notes"
+                      value={selectedMess?.notes || ''}
+                      onChangeText={(text) => setSelectedMess({ ...selectedMess, notes: text })}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setEditMessModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addMessButton}
+                  onPress={async () => {
+                    if (!selectedMess?.id) {
+                      Alert.alert('Error', 'Invalid mess');
+                      return;
+                    }
+                    const payload = {
+                      email: selectedMess.emailAddress || selectedMess.email,
+                      password: selectedMess.password,
+                      messNumber: selectedMess.messNumber,
+                      ownerName: selectedMess.ownerName,
+                      messName: selectedMess.messName,
+                      phoneNumber: selectedMess.phoneNumber,
+                      address: selectedMess.address,
+                      city: selectedMess.city,
+                      state: selectedMess.state,
+                      country: selectedMess.country,
+                      zip: selectedMess.zip,
+                      status: Boolean(selectedMess.status),
+                      messType: selectedMess.messType,
+                      description: selectedMess.description || selectedMess.messDescription,
+                      notes: selectedMess.notes,
+                    };
+                    const resp = await messService.updateMessSuper(selectedMess.id, payload);
+                    if (resp.type === 'success') {
+                      Alert.alert('Success', 'Mess updated');
+                      setEditMessModalVisible(false);
+                      loadMessData(0, true);
+                    } else {
+                      Alert.alert('Error', resp.message || 'Failed to update');
+                    }
+                  }}
+                >
+                  <Text style={styles.addMessButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
       </SuperAdminLayout>
     </View>
@@ -1466,7 +1601,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    },
+  },
   searchInput: {
     flex: 1,
     marginLeft: 12,
@@ -1524,6 +1659,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
   },
+  cardInactive: { backgroundColor: '#fff1f1' },
+  cardSelectable: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16 },
   messCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1610,8 +1747,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F1F5F9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  selectionText: { color: '#0F172A', fontWeight: '600' },
+  selectionButton: { backgroundColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  selectionButtonText: { color: '#475569', fontWeight: '600' },
+  selectionButtonDanger: { backgroundColor: '#DC2626', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  selectionButtonDangerText: { color: '#FFFFFF', fontWeight: '700' },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#9CA3AF', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  checkboxChecked: { borderColor: '#8B5CF6', backgroundColor: '#8B5CF6' },
   secondaryButton: {
-    backgroundColor: '#ffd351',
+    backgroundColor: '#feea79',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1787,4 +1932,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  bottomSelectionBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bottomSelectionText: { color: '#FFFFFF', fontWeight: '700' },
+  bottomCancelButton: { backgroundColor: '#374151', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  bottomCancelText: { color: '#E5E7EB', fontWeight: '600' },
+  bottomDeleteButton: { backgroundColor: '#DC2626', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  bottomDeleteText: { color: '#FFFFFF', fontWeight: '700' },
 });

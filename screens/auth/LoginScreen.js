@@ -19,8 +19,8 @@ import { login } from "../../store/slices/authSlice";
 // Test credentials for quick testing
 const TEST_CREDENTIALS = [
   { email: "super@gmail.com", password: "1234", label: "Super Admin" },
-  { email: "adi@gmail.com", password: "1234", label: "Admin" },
-  { email: "user@gmail.com", password: "1234", label: "User" },
+  { email: "admin@gmail.com", password: "123456", label: "Admin" },
+  { email: "cust@gmail.com", password: "1234", label: "User" },
 ];
 
 export default function LoginScreen({ navigation }) {

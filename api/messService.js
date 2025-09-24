@@ -4,7 +4,7 @@ import apiClient from './apiClient';
 
 class MessService {
   // Get all mess list with pagination (for Super Admin)
-  async getAllMessList(page = 0, size = 10, sort = 'createdAt,desc') {
+  async getAllMessList(page = 0, size = 1000, sort = 'createdAt,desc') {
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -30,6 +30,7 @@ class MessService {
         data: null,
       };
     } catch (error) {
+      console.error('MessService - getAllMessList error:', error);
       return {
         type: API_RESPONSE_TYPES.ERROR,
         message: 'Failed to fetch mess list',
@@ -52,19 +53,20 @@ class MessService {
     }
   }
 
-  // Get mess by ID
-  async getMessById(id) {
-    try {
-      const response = await apiClient.get(`${API_CONFIG.ENDPOINTS.MESS.LIST}/${id}`);
-      return response;
-    } catch (error) {
-      return {
-        type: API_RESPONSE_TYPES.ERROR,
-        message: 'Failed to fetch mess details',
-        data: null,
-      };
-    }
-  }
+  // // Get mess by ID
+  // async getMessById(id) {
+  //   try {
+  //     // Use Super Admin endpoint for fetching detailed mess info
+  //     const response = await apiClient.get(`/super/getMessById/${id}`);
+  //     return response;
+  //   } catch (error) {
+  //     return {
+  //       type: API_RESPONSE_TYPES.ERROR,
+  //       message: 'Failed to fetch mess details',
+  //       data: null,
+  //     };
+  //   }
+  // }
 
   // Create new mess (Super Admin)
   async createMess(messData) {
@@ -75,7 +77,7 @@ class MessService {
         password: messData.password,
         messNumber: messData.messNumber,
         ownerName: messData.ownerName,
-        messName: messData.messName || messData.ownerName, // fallback if separate field missing
+        messName: messData.messName,
         phoneNumber: messData.phoneNumber,
         address: messData.address,
         city: messData.city,
@@ -121,13 +123,20 @@ class MessService {
   // Update mess (Super Admin endpoint)
   async updateMessSuper(id, messData) {
     try {
+      console.log("💛💛❤️❤️❤️", id);
+      console.log("💛💛❤️❤️❤️", id);
+
       // Some backends expect only changed fields; send what we have
       const response = await apiClient.put(
-        `/super/updateMess/${id}`,
+        `${API_CONFIG.ENDPOINTS.MESS.UPDATE}/${id}`,
         messData
       );
+      console.log("response", response);
+
       return response;
     } catch (error) {
+      console.log("update error is ", error);
+
       return {
         type: API_RESPONSE_TYPES.ERROR,
         message: 'Failed to update mess',
@@ -155,8 +164,21 @@ class MessService {
   // Delete mess (Super Admin endpoint)
   async deleteMessSuper(id) {
     try {
-      const response = await apiClient.delete(`/super/deleteMess/${id}`);
-      return response;
+      const response = await apiClient.delete(`/super/deleteMess/${id}`, { responseType: 'text' });
+
+      if (response.type === API_RESPONSE_TYPES.SUCCESS) {
+        return {
+          type: API_RESPONSE_TYPES.SUCCESS,
+          message: typeof response.data === 'string' ? response.data : (response.message || 'Mess deleted successfully'),
+          data: null,
+        };
+      }
+
+      return {
+        type: API_RESPONSE_TYPES.ERROR,
+        message: response.message || 'Failed to delete mess',
+        data: null,
+      };
     } catch (error) {
       return {
         type: API_RESPONSE_TYPES.ERROR,

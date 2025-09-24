@@ -7,6 +7,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { ADMIN_COLORS } from '../../config/colors';
 
 export default function Attendance({ navigation }) {
   return (
@@ -25,7 +26,7 @@ export default function Attendance({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7FAFC',
+    backgroundColor: ADMIN_COLORS.surface,
   },
   content: {
     flex: 1,

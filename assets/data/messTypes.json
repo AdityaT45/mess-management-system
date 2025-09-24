@@ -1,0 +1,19 @@
+{
+  "messTypes": [
+    "Veg Mess",
+    "Non-Veg Mess",
+    "Mixed Mess",
+    "Pure Vegetarian",
+    "Jain Mess",
+    "South Indian Mess",
+    "North Indian Mess",
+    "Continental Mess",
+    "Home Style Mess",
+    "Budget Mess",
+    "Premium Mess",
+    "Student Mess",
+    "Working Professional Mess",
+    "Family Mess",
+    "Corporate Mess"
+  ]
+}

@@ -24,12 +24,12 @@ class ApiClient {
     // Add authorization header if token exists
     if (includeAuth) {
       const token = this.getStoredToken();
-      console.log('🔐 ApiClient - Getting headers, token available:', !!token);
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        console.log('🔐 ApiClient - Authorization header set:', `Bearer ${token.substring(0, 20)}...`);
+
       } else {
-        console.log('⚠️ ApiClient - No token available for authorization');
+
       }
     }
     return headers;
@@ -39,7 +39,7 @@ class ApiClient {
   getStoredToken() {
     try {
       let token = tokenManager.getToken();
-      
+
       // Fallback: if token manager doesn't have token, try to get from Redux store
       if (!token) {
         try {
@@ -71,10 +71,10 @@ class ApiClient {
   // Make HTTP request with retry logic
   async makeRequest(url, options = {}, retryCount = 0) {
     const fullUrl = url.startsWith('http') ? url : `${this.baseURL}${url}`;
-    
+
     // Check if this is a FormData request
     const isFormData = options.body && options.body instanceof FormData;
-    
+
     const defaultOptions = {
       method: 'GET',
       headers: this.getHeaders(true, !isFormData), // includeAuth=true, includeContentType=!isFormData
@@ -90,13 +90,38 @@ class ApiClient {
       },
     };
 
-    console.log('🌐 ApiClient - Making request to:', fullUrl);
-    console.log('🌐 ApiClient - Request method:', requestOptions.method);
-    console.log('🌐 ApiClient - Is FormData request:', isFormData);
-    console.log('🌐 ApiClient - Request headers:', requestOptions.headers);
-    console.log('🌐 ApiClient - Request body type:', typeof requestOptions.body);
+    // For GET/DELETE without a body, omit Content-Type header
+    try {
+      const methodUpper = (requestOptions.method || 'GET').toUpperCase();
+      const hasBody = !!requestOptions.body;
+      if ((methodUpper === 'GET' || methodUpper === 'DELETE') && !hasBody) {
+        if (requestOptions.headers && 'Content-Type' in requestOptions.headers) {
+          delete requestOptions.headers['Content-Type'];
+        }
+      }
+    } catch (headerSanitizeError) {
+      console.warn('ApiClient - Could not sanitize headers:', headerSanitizeError);
+    }
+
+
 
     try {
+      try {
+        // Lightweight diagnostics for protected admin/super routes (no sensitive values logged)
+        const isAdminUpdate = String(fullUrl).includes('/admin/updateCustomer/');
+        const isSuperDelete = String(fullUrl).includes('/super/deleteMess/');
+        if (isAdminUpdate || isSuperDelete) {
+          const state = store.getState && store.getState();
+          const role = state?.auth?.role;
+          const hasAuthHeader = !!requestOptions.headers?.Authorization;
+          console.log('🔎 ApiClient Debug - protected call:', {
+            url: fullUrl,
+            method: requestOptions.method,
+            hasAuthHeader,
+            role,
+          });
+        }
+      } catch (_) { }
 
       // Add timeout handling for React Native
       const controller = new AbortController();
@@ -179,7 +204,7 @@ class ApiClient {
   async handleNetworkError(error, url, options, retryCount) {
     let errorMessage = 'Network error occurred';
     let errorType = API_RESPONSE_TYPES.NETWORK_ERROR;
-    
+
     // Provide more specific error messages
     if (error.message === 'Network request failed') {
       errorMessage = 'Cannot connect to server. Please check your internet connection and server status.';
@@ -229,7 +254,7 @@ class ApiClient {
   // Retry request with exponential backoff
   async retryRequest(url, options, retryCount) {
     const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
-    
+
     await new Promise(resolve => setTimeout(resolve, delay));
     return this.makeRequest(url, options, retryCount + 1);
   }

@@ -1,0 +1,13 @@
+{
+  "Maharashtra": {
+    "Pune": ["Haveli", "Mulshi", "Baramati", "Shirur", "ritesh"],
+    "Mumbai": ["Andheri", "Borivali", "Kurla", "Dadar"],
+    "Nashik": ["Nashik", "Sinnar", "Igatpuri", "Dindori"]
+  },
+  "Gujarat": {
+    "Ahmedabad": ["Daskroi", "Sanand", "Dholka"],
+    "Surat": ["Choryasi", "Palsana", "Bardoli"]
+  }
+}
+
+

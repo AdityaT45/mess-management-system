@@ -25,7 +25,7 @@ class AuthService {
   async login(credentials) {
     try {
       const { email, password } = credentials;
-      
+
       // Validate input
       if (!email || !password) {
         return {
@@ -46,7 +46,7 @@ class AuthService {
       }
 
       // Make API request
-      
+
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.AUTH.LOGIN, {
         email,
         password,
@@ -55,12 +55,12 @@ class AuthService {
       // Handle successful login
       if (response.type === API_RESPONSE_TYPES.SUCCESS) {
         const { data } = response;
-        
+
         // Extract token from your API response format
         const token = data['bearer token'] || data.token;
         const username = data.username;
         const roleData = data.role;
-        
+
         // Store token if provided
         if (token) {
           tokenManager.setToken(token);
@@ -68,8 +68,12 @@ class AuthService {
 
         // Extract role from your API response format
         let userRole = null;
-        if (roleData && Array.isArray(roleData) && roleData.length > 0) {
-          userRole = roleData[0].authority; // Extract from "ROLE_SUPER_ADMIN" format
+        if (roleData) {
+          if (Array.isArray(roleData) && roleData.length > 0) {
+            userRole = roleData[0].authority; // Extract from "ROLE_SUPER_ADMIN" format
+          } else if (typeof roleData === 'string') {
+            userRole = roleData; // Direct string format like "admin"
+          }
         }
 
         // Return user data with normalized role
@@ -110,10 +114,10 @@ class AuthService {
     try {
       // Call logout endpoint if available
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
-      
+
       // Clear stored token regardless of API response
       tokenManager.clearToken();
-      
+
       return {
         type: API_RESPONSE_TYPES.SUCCESS,
         message: 'Logout successful',
@@ -122,7 +126,7 @@ class AuthService {
     } catch (error) {
       // Clear token even if API call fails
       tokenManager.clearToken();
-      
+
       return {
         type: API_RESPONSE_TYPES.SUCCESS,
         message: 'Logout successful',
@@ -135,14 +139,14 @@ class AuthService {
   async refreshToken() {
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.AUTH.REFRESH);
-      
+
       if (response.type === API_RESPONSE_TYPES.SUCCESS) {
         const { data } = response;
-        
+
         if (data.token) {
           tokenManager.setToken(data.token);
         }
-        
+
         return {
           type: API_RESPONSE_TYPES.SUCCESS,
           message: 'Token refreshed successfully',
@@ -152,7 +156,7 @@ class AuthService {
           },
         };
       }
-      
+
       return {
         type: API_RESPONSE_TYPES.ERROR,
         message: response.message || 'Token refresh failed',
@@ -240,17 +244,24 @@ class AuthService {
   // Normalize role from API response to app format
   normalizeRole(apiRole) {
     if (!apiRole) return null;
-    
+
     // Map API roles to app roles
     const roleMapping = {
       'ROLE_SUPER_ADMIN': 'superadmin',
       'ROLE_ADMIN': 'admin',
       'ROLE_USER': 'user',
+      'ROLE_CUSTOMER': 'user',
       'SUPER_ADMIN': 'superadmin',
       'ADMIN': 'admin',
       'USER': 'user',
+      'CUSTOMER': 'user',
+      // Handle lowercase formats from API
+      'admin': 'admin',
+      'superadmin': 'superadmin',
+      'user': 'user',
+      'customer': 'user',
     };
-    
+
     return roleMapping[apiRole] || apiRole.toLowerCase();
   }
 
@@ -264,18 +275,18 @@ class AuthService {
       },
       {
         email: "admin@gmail.com",
-        password: "1234",
+        password: "123456",
         role: "ROLE_ADMIN"
       },
       {
         email: "user@gmail.com",
         password: "1234",
-        role: "ROLE_USER"
+        role: "ROLE_CUSTOMER"
       }
     ];
 
-    return testUsers.find(user => 
-      user.email === email && 
+    return testUsers.find(user =>
+      user.email === email &&
       user.password === password
     );
   }
