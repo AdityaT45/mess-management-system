@@ -4,7 +4,7 @@ export const API_CONFIG = {
   // Find your IP with: ipconfig (Windows) or ifconfig (Mac/Linux)
   BASE_URL: 'http://192.168.1.34:8080', // Your computer's IP address   room wifi
   // BASE_URL: 'http://10.221.51.134:8080', // Your computer's IP address  ritesh mobile
-  // BASE_URL: 'http://10.243.73.134:8080', // Your computer's IP address  adi mobile
+  // BASE_URL: 'http://10.218.79.134:8081', // Your computer's IP address  adi mobile
   // Alternative: If testing on web, you can use:
   // BASE_URL: 'http://localhost:8080',
 
@@ -20,6 +20,9 @@ export const API_CONFIG = {
       ASSIGN_SUBSCRIPTION: '/admin/assignSubscriptionsToCustomer',
       GET_DETAILED_CUSTOMERS_FOR_SUBSCRIPTION: '/admin/getDetailedCustomerListForSubscription',
       CUSTOMERS_ELIGIBLE_FOR_SUBSCRIPTION: '/admin/customersEligibleForSubscription',
+      // Meal Timing Management
+      CREATE_MEAL_TIMING: '/admin/createMealTiming',
+      GET_ALL_MEAL_TIMINGS: '/admin/getAllMealTimings',
     },
     AUTH: {
       LOGIN: '/auth/login',

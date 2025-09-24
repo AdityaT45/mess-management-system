@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     RefreshControl,
     StyleSheet,
@@ -11,6 +10,8 @@ import {
     View
 } from 'react-native';
 import adminService from '../../../api/adminService';
+import AppAlert from '../../../components/common/AppAlert';
+import { classifyError, extractErrorMessage } from '../../../components/common/alertUtils';
 import { ADMIN_COLORS } from '../../../config/colors';
 
 export default function SubscriptionPlanManagement({ navigation }) {
@@ -18,6 +19,9 @@ export default function SubscriptionPlanManagement({ navigation }) {
     const [refreshing, setRefreshing] = useState(false);
     const [deletingPlanId, setDeletingPlanId] = useState(null);
     const [plans, setPlans] = useState([]);
+    const [alertState, setAlertState] = useState({ visible: false, type: 'info', title: '', message: '' });
+    const [confirmState, setConfirmState] = useState({ visible: false, title: '', message: '', onConfirm: null });
+    const showAlert = (type, title, message) => setAlertState({ visible: true, type, title, message: String(message || '') });
 
     useEffect(() => {
         loadPlans();
@@ -41,12 +45,13 @@ export default function SubscriptionPlanManagement({ navigation }) {
                 console.log('Loaded plans:', plansData);
             } else {
                 console.log('API Error:', response.message);
-                Alert.alert('Error', response.message || 'Failed to load subscription plans');
+                const msg = extractErrorMessage(response, 'Failed to load subscription plans');
+                showAlert(classifyError(response), 'Error', msg);
                 setPlans([]);
             }
         } catch (error) {
             console.error('Error loading plans:', error);
-            Alert.alert('Error', 'Failed to load subscription plans');
+            showAlert('error', 'Error', 'Failed to load subscription plans');
             setPlans([]);
         } finally {
             if (isRefresh) {
@@ -77,56 +82,45 @@ export default function SubscriptionPlanManagement({ navigation }) {
 
             if (response.type === 'success') {
                 const updatedPlanData = response.data;
-                setPlans(prev => prev.map(p =>
-                    p.id === plan.id ? updatedPlanData : p
-                ));
-                Alert.alert('Success', `Plan ${updatedPlanData.active ? 'activated' : 'deactivated'} successfully`);
+                setPlans(prev => prev.map(p => (p.id === plan.id ? updatedPlanData : p)));
+                showAlert('success', 'Success', `Plan ${updatedPlanData.active ? 'activated' : 'deactivated'} successfully`);
             } else {
-                Alert.alert('Error', response.message || 'Failed to update plan status');
+                const msg = extractErrorMessage(response, 'Failed to update plan status');
+                showAlert(classifyError(response), 'Error', msg);
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to update plan status');
+            showAlert('error', 'Error', 'Failed to update plan status');
         }
     };
 
     const handleDeletePlan = (plan) => {
-        Alert.alert(
-            'Delete Plan',
-            `Are you sure you want to delete "${plan.name}"?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setDeletingPlanId(plan.id);
-                        try {
-                            console.log('Deleting plan:', plan.id);
-                            const response = await adminService.deleteSubscriptionPlan(plan.id);
-                            console.log('Delete response:', response);
-
-                            if (response.type === 'success') {
-                                // Remove from local state immediately for fast UI update
-                                setPlans(prev => prev.filter(p => p.id !== plan.id));
-
-                                // Show success message
-                                Alert.alert('Success', 'Plan deleted successfully');
-
-                                // Refresh the list from server immediately
-                                loadPlans(true);
-                            } else {
-                                Alert.alert('Error', response.message || 'Failed to delete plan');
-                            }
-                        } catch (error) {
-                            console.error('Delete error:', error);
-                            Alert.alert('Error', 'Failed to delete plan: ' + error.message);
-                        } finally {
-                            setDeletingPlanId(null);
-                        }
+        setConfirmState({
+            visible: true,
+            title: 'Delete Plan',
+            message: `Are you sure you want to delete "${plan.name}"?`,
+            onConfirm: async () => {
+                setConfirmState({ visible: false, title: '', message: '', onConfirm: null });
+                setDeletingPlanId(plan.id);
+                try {
+                    console.log('Deleting plan:', plan.id);
+                    const response = await adminService.deleteSubscriptionPlan(plan.id);
+                    console.log('Delete response:', response);
+                    if (response.type === 'success') {
+                        setPlans(prev => prev.filter(p => p.id !== plan.id));
+                        showAlert('success', 'Success', 'Plan deleted successfully');
+                        loadPlans(true);
+                    } else {
+                        const msg = extractErrorMessage(response, 'Failed to delete plan');
+                        showAlert(classifyError(response), 'Error', msg);
                     }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    showAlert('error', 'Error', 'Failed to delete plan: ' + error.message);
+                } finally {
+                    setDeletingPlanId(null);
                 }
-            ]
-        );
+            },
+        });
     };
 
     const renderPlanCard = ({ item }) => (
@@ -252,6 +246,26 @@ export default function SubscriptionPlanManagement({ navigation }) {
                         </TouchableOpacity>
                     </View>
                 }
+            />
+            <AppAlert
+                visible={alertState.visible}
+                type={alertState.type}
+                title={alertState.title}
+                message={alertState.message}
+                confirmText={'Done'}
+                onConfirm={() => setAlertState({ visible: false, type: 'info', title: '', message: '' })}
+                onRequestClose={() => setAlertState({ visible: false, type: 'info', title: '', message: '' })}
+            />
+            <AppAlert
+                visible={confirmState.visible}
+                type={'warning'}
+                title={confirmState.title}
+                message={confirmState.message}
+                confirmText={'Delete'}
+                cancelText={'Cancel'}
+                onCancel={() => setConfirmState({ visible: false, title: '', message: '', onConfirm: null })}
+                onConfirm={() => confirmState.onConfirm && confirmState.onConfirm()}
+                onRequestClose={() => setConfirmState({ visible: false, title: '', message: '', onConfirm: null })}
             />
         </View>
     );

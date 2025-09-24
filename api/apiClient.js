@@ -127,6 +127,22 @@ class ApiClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+      // Verbose request logging for meal timing endpoints
+      const isMealTimingCall = String(fullUrl).includes('/admin/createMealTiming') || String(fullUrl).includes('/admin/getAllMealTimings');
+      if (isMealTimingCall) {
+        try {
+          console.log('🛰️ ApiClient Request:', {
+            url: fullUrl,
+            method: requestOptions.method,
+            headers: requestOptions.headers,
+            retryCount,
+          });
+          if (requestOptions.body && typeof requestOptions.body === 'string') {
+            console.log('📝 ApiClient Request Body:', requestOptions.body);
+          }
+        } catch (_) { }
+      }
+
       const response = await fetch(fullUrl, {
         ...requestOptions,
         signal: controller.signal,
@@ -134,14 +150,39 @@ class ApiClient {
 
       clearTimeout(timeoutId);
 
-      // Handle different response types
+      // Handle different response types (robust JSON parsing)
       const contentType = response.headers.get('content-type');
       let data;
-
       if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+        try {
+          data = await response.json();
+        } catch (e) {
+          // Fallback to text if body is not valid JSON despite header
+          try {
+            const textBody = await response.clone().text();
+            data = { message: textBody, raw: textBody };
+          } catch (_) {
+            data = { message: 'Invalid JSON response body' };
+          }
+        }
       } else {
-        data = await response.text();
+        try {
+          data = await response.text();
+        } catch (e) {
+          data = '';
+        }
+      }
+
+      if (isMealTimingCall) {
+        try {
+          const bodySnippet = typeof data === 'string' ? String(data).slice(0, 200) : JSON.stringify(data).slice(0, 200);
+          console.log('📡 ApiClient Response:', {
+            status: response.status,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers.entries()),
+            bodySnippet,
+          });
+        } catch (_) { }
       }
 
       // Handle successful responses
@@ -235,6 +276,9 @@ class ApiClient {
 
     // Retry logic for network errors
     if (this.shouldRetry(0, retryCount)) {
+      if (String(url).includes('/admin/createMealTiming')) {
+        console.log('⏳ ApiClient retrying request due to network/server error', { retryCount });
+      }
       return this.retryRequest(url, options, retryCount);
     }
 

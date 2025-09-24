@@ -204,67 +204,7 @@ export default function SuperAdminDashboard({ navigation }) {
       onProfilePress={handleLogout}
     >
       {/* Sidebar */}
-      {sidebarOpen && (
-        <>
-          <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={() => setSidebarOpen(false)} />
-          <View style={[styles.sidebar, { paddingTop: insets.top }]}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Super Admin Panel</Text>
-              <Text style={styles.sidebarSubtitle}>{user?.email || 'superadmin@system.com'}</Text>
-            </View>
-
-            <View style={styles.sidebarMenu}>
-              <TouchableOpacity
-                style={[styles.sidebarItem, { backgroundColor: '#F3F4F6' }]}
-                onPress={() => navigateToScreen('SuperAdminDashboard')}
-              >
-                <Ionicons name="home" size={20} color="#8B5CF6" />
-                <Text style={[styles.sidebarText, { color: '#8B5CF6' }]}>Dashboard</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sidebarItem}
-                onPress={() => navigateToScreen('MessManagement')}
-              >
-                <Ionicons name="business" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>Mess Management</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sidebarItem}
-                onPress={() => navigateToScreen('UserManagement')}
-              >
-                <Ionicons name="people" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>User Management</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sidebarItem}
-                onPress={() => navigateToScreen('FinancialControl')}
-              >
-                <Ionicons name="trending-up" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>Financial Control</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sidebarItem}
-                onPress={() => navigateToScreen('SystemOperations')}
-              >
-                <Ionicons name="settings" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>System Operations</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sidebarItem}
-                onPress={() => navigateToScreen('Reports')}
-              >
-                <Ionicons name="bar-chart" size={20} color="#718096" />
-                <Text style={styles.sidebarText}>Reports</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </>
-      )}
+   
 
       {/* Main Content */}
       <ScrollView
@@ -285,7 +225,7 @@ export default function SuperAdminDashboard({ navigation }) {
         </View>
 
         {/* Global Search Bar */}
-        <View style={styles.searchSection}>
+        {/* <View style={styles.searchSection}>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#718096" style={styles.searchIcon} />
             <TextInput
@@ -299,7 +239,7 @@ export default function SuperAdminDashboard({ navigation }) {
               <Ionicons name="options" size={20} color="#8B5CF6" />
             </TouchableOpacity>
           </View>
-        </View>
+        </View> */}
 
         {/* System Overview Stats */}
         <View style={styles.statsSection}>

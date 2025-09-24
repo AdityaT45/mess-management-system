@@ -15,6 +15,25 @@ class AdminService {
         }
     }
 
+    // Meal Timing Management
+    async getAllMealTimings() {
+        try {
+            const response = await apiClient.get(API_CONFIG.ENDPOINTS.ADMIN.GET_ALL_MEAL_TIMINGS);
+            return response;
+        } catch (error) {
+            return { type: API_RESPONSE_TYPES.ERROR, data: null, message: 'Failed to fetch meal timings' };
+        }
+    }
+
+    async createMealTiming(payload) {
+        try {
+            const response = await apiClient.post(API_CONFIG.ENDPOINTS.ADMIN.CREATE_MEAL_TIMING, payload);
+            return response;
+        } catch (error) {
+            return { type: API_RESPONSE_TYPES.ERROR, data: null, message: 'Failed to create meal timing: ' + error.message };
+        }
+    }
+
     async updateOwnMess(messData) {
         try {
             const response = await apiClient.put(API_CONFIG.ENDPOINTS.ADMIN.UPDATE_OWN_MESS, messData);

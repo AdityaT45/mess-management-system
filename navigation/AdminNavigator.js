@@ -11,6 +11,8 @@ import CustomerManagement from '../screens/admin/CustomerManagement';
 import AdminDashboard from '../screens/admin/Dashboard';
 import EditCustomerByAdmin from '../screens/admin/EditCustomerByAdmin';
 import EditProfile from '../screens/admin/EditProfile';
+import CreateMealTiming from '../screens/admin/mealtiming/CreateMealTiming';
+import ManageMealTiming from '../screens/admin/mealtiming/ManageMealTiming';
 import Payments from '../screens/admin/Payments';
 import { AssignSubscription, CreateSubscription, EditSubscriptionPlan, ManageAssignSubscription, ManageSubscriptionPlan } from '../screens/admin/subscription';
 
@@ -45,6 +47,13 @@ function CustomDrawerContent(props) {
       icon: 'swap-horizontal-outline',
       activeIcon: 'swap-horizontal',
       route: 'AssignSubscription'
+    },
+    {
+      name: 'MealTiming',
+      label: 'Meal Time Management',
+      icon: 'time-outline',
+      activeIcon: 'time',
+      route: 'MealTiming'
     }
   ];
 
@@ -74,6 +83,8 @@ function CustomDrawerContent(props) {
                   navigation.navigate('SubscriptionPlans', { screen: 'ManageAssignSubscription' });
                 } else if (item.route === 'SubscriptionPlans') {
                   navigation.navigate('SubscriptionPlans', { screen: 'ManageSubscriptionPlan' });
+                } else if (item.route === 'MealTiming') {
+                  navigation.navigate('MealTiming', { screen: 'ManageMealTiming' });
                 } else {
                   navigation.navigate(item.route);
                 }
@@ -199,6 +210,35 @@ function AdminSubscriptionStack() {
   );
 }
 
+const MealTimingStack = createNativeStackNavigator();
+function AdminMealTimingStack() {
+  return (
+    <MealTimingStack.Navigator
+      screenOptions={({ navigation }) => ({
+        headerStyle: { backgroundColor: ADMIN_COLORS.primary },
+        headerTintColor: ADMIN_COLORS.white,
+        headerTitleStyle: { color: ADMIN_COLORS.white },
+        headerLeft: () => (
+          <TouchableOpacity onPress={() => navigation.getParent()?.openDrawer()} style={{ paddingHorizontal: 12 }}>
+            <Ionicons name="menu" size={22} color={ADMIN_COLORS.white} />
+          </TouchableOpacity>
+        ),
+      })}
+    >
+      <MealTimingStack.Screen
+        name="ManageMealTiming"
+        component={ManageMealTiming}
+        options={{ title: 'Meal Time Management' }}
+      />
+      <MealTimingStack.Screen
+        name="CreateMealTiming"
+        component={CreateMealTiming}
+        options={{ title: 'Create Meal Time' }}
+      />
+    </MealTimingStack.Navigator>
+  );
+}
+
 function Tabs() {
   return (
     <Tab.Navigator
@@ -270,6 +310,11 @@ export default function AdminNavigator() {
         options={{
           headerShown: false,
         }}
+      />
+      <Drawer.Screen
+        name="MealTiming"
+        component={AdminMealTimingStack}
+        options={{ headerShown: false }}
       />
       {/* Assign Subscription uses the same stack and initial route is controlled via drawer item navigation */}
     </Drawer.Navigator>

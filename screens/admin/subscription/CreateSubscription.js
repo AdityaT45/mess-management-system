@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -11,6 +10,7 @@ import {
     View
 } from 'react-native';
 import adminService from '../../../api/adminService';
+import AppAlert from '../../../components/common/AppAlert';
 import ColorPickerModal from '../../../components/common/ColorPickerModal';
 import FloatingLabelInput from '../../../components/common/FloatingLabelInput';
 import { ADMIN_COLORS } from '../../../config/colors';
@@ -26,6 +26,21 @@ export default function CreateSubscriptionPlan({ navigation }) {
         colur: '#2db365'
     });
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
+    const [alertState, setAlertState] = useState({ visible: false, type: 'info', title: '', message: '' });
+
+    const showAlert = (type, title, message) => {
+        setAlertState({ visible: true, type, title, message: String(message || '') });
+    };
+
+    const extractErrorMessage = (resp, fallback) => {
+        if (!resp) return fallback || 'Something went wrong';
+        if (resp.data) {
+            if (typeof resp.data === 'string') return resp.data;
+            if (resp.data.message) return resp.data.message;
+            if (resp.data.error) return resp.data.error;
+        }
+        return resp.message || fallback || 'Request failed';
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -48,33 +63,15 @@ export default function CreateSubscriptionPlan({ navigation }) {
 
     const handleCreatePlan = async () => {
         // Validation
-        if (!formData.name.trim()) {
-            Alert.alert('Error', 'Plan name is required');
-            return;
-        }
-        if (!formData.description.trim()) {
-            Alert.alert('Error', 'Plan description is required');
-            return;
-        }
-        if (!formData.price || parseFloat(formData.price) <= 0) {
-            Alert.alert('Error', 'Valid price is required');
-            return;
-        }
-        if (!formData.totalMealCredits || parseInt(formData.totalMealCredits) <= 0) {
-            Alert.alert('Error', 'Valid meal credits is required');
-            return;
-        }
-        if (!formData.durationInDays || parseInt(formData.durationInDays) <= 0) {
-            Alert.alert('Error', 'Valid duration is required');
-            return;
-        }
+        if (!formData.name.trim()) { showAlert('warning', 'Missing field', 'Plan name is required'); return; }
+        if (!formData.description.trim()) { showAlert('warning', 'Missing field', 'Plan description is required'); return; }
+        if (!formData.price || parseFloat(formData.price) <= 0) { showAlert('warning', 'Invalid value', 'Valid price is required'); return; }
+        if (!formData.totalMealCredits || parseInt(formData.totalMealCredits) <= 0) { showAlert('warning', 'Invalid value', 'Valid meal credits is required'); return; }
+        if (!formData.durationInDays || parseInt(formData.durationInDays) <= 0) { showAlert('warning', 'Invalid value', 'Valid duration is required'); return; }
 
         // Optional color validation if provided
         const hexRegex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-        if (formData.colur && !hexRegex.test(String(formData.colur).trim())) {
-            Alert.alert('Error', 'Please provide a valid color (e.g., #2db365)');
-            return;
-        }
+        if (formData.colur && !hexRegex.test(String(formData.colur).trim())) { showAlert('warning', 'Invalid color', 'Please provide a valid color (e.g., #2db365)'); return; }
 
         try {
             const planData = {
@@ -90,22 +87,19 @@ export default function CreateSubscriptionPlan({ navigation }) {
             console.log('Creating plan:', planData);
 
             const response = await adminService.createSubscriptionPlan(planData);
-
             if (response.type === 'success') {
-                resetForm(); // Reset all input fields
-                Alert.alert('Success', 'Subscription plan created successfully!', [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.navigate('ManageSubscriptionPlan')
-                    }
-                ]);
+                resetForm();
+                const msg = (response.data && (response.data.message || response.data.msg)) || response.message || 'Subscription plan created successfully!';
+                showAlert('success', 'Success', msg);
             } else {
-                Alert.alert('Error', response.message || 'Failed to create plan');
+                const errMsg = extractErrorMessage(response, 'Failed to create plan');
+                const isNetwork = response.type === 'network_error' || response.status === 0;
+                showAlert(isNetwork ? 'warning' : 'error', isNetwork ? 'Network issue' : 'Error', errMsg);
             }
 
         } catch (error) {
             console.error('Error creating plan:', error);
-            Alert.alert('Error', 'Failed to create plan');
+            showAlert('error', 'Error', 'Failed to create plan');
         }
     };
 
@@ -261,6 +255,19 @@ export default function CreateSubscriptionPlan({ navigation }) {
                     </View>
                 </View>
             </ScrollView>
+            <AppAlert
+                visible={alertState.visible}
+                type={alertState.type}
+                title={alertState.title}
+                message={alertState.message}
+                confirmText={'Done'}
+                onConfirm={() => {
+                    const wasSuccess = alertState.type === 'success';
+                    setAlertState({ visible: false, type: 'info', title: '', message: '' });
+                    if (wasSuccess) navigation.navigate('ManageSubscriptionPlan');
+                }}
+                onRequestClose={() => setAlertState({ visible: false, type: 'info', title: '', message: '' })}
+            />
         </KeyboardAvoidingView>
     );
 }

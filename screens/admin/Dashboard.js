@@ -316,7 +316,7 @@ export default function AdminDashboard({ navigation }) {
                 <Text style={styles.locationText}>{mess.city}{mess.state ? `, ${mess.state}` : ''}</Text>
               </View>
             )}
-            
+
 
           </View>
         </View>
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   heroWrap: { paddingHorizontal: 0, height: 170, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  heroBg: { backgroundColor: ADMIN_COLORS.primary, paddingBottom: 10, paddingHorizontal: 27,paddingLeft:20, borderBottomLeftRadius: 55, borderBottomRightRadius: 55, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 10 },
+  heroBg: { backgroundColor: ADMIN_COLORS.primary, paddingBottom: 10, paddingHorizontal: 27, paddingLeft: 20, borderBottomLeftRadius: 55, borderBottomRightRadius: 55, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 10 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroMenuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginTop: 0 },
   heroContent: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingBottom: 8 },

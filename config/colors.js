@@ -11,8 +11,16 @@ export default CUSTOMER_COLORS;
 
 // Dynamic theme for admin area
 export const ADMIN_COLORS = {
-    primary: '#46001b',
+    primary: '#eb5804',
     surface: '#f3f3f3',
+    white: '#ffffff',
+    black: '#000000',
+};
+
+// Dynamic theme for super admin area
+export const SUPER_ADMIN_COLORS = {
+    primary: '#4e9c3a',
+    surface: '#F7FAFC',
     white: '#ffffff',
     black: '#000000',
 };
